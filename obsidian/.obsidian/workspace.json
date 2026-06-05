@@ -1,0 +1,212 @@
+{
+  "main": {
+    "id": "efb8462d4435450d",
+    "type": "split",
+    "children": [
+      {
+        "id": "a87522a22fd5b6bb",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "cccd63cf76ee9f7b",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "第1章 像素初现/1.2 开窗.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "1.2 开窗"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "f8f71f71140e1a19",
+    "type": "split",
+    "children": [
+      {
+        "id": "a3c7272a42e9a5c6",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "d347ba012f31a5d8",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "文件列表"
+            }
+          },
+          {
+            "id": "516aa10656f0a69e",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "搜索"
+            }
+          },
+          {
+            "id": "5bcb8057bf787c21",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "书签"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "5a06cd6039deb94a",
+    "type": "split",
+    "children": [
+      {
+        "id": "274b37f0d9177cce",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "434f4b5805c2139d",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "第1章 像素初现/1.2 开窗.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "1.2 开窗 的反向链接列表"
+            }
+          },
+          {
+            "id": "a35d70fea7269f8b",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "第1章 像素初现/1.2 开窗.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "1.2 开窗 的出链列表"
+            }
+          },
+          {
+            "id": "3c331a4463ca8607",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "标签"
+            }
+          },
+          {
+            "id": "8bb7d7513b95cdf7",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "添加笔记属性"
+            }
+          },
+          {
+            "id": "ba79c4dda9f2c00c",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "第1章 像素初现/1.2 开窗.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "1.2 开窗 的大纲"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:打开快速切换": false,
+      "graph:查看关系图谱": false,
+      "canvas:新建白板": false,
+      "daily-notes:打开/创建今天的日记": false,
+      "templates:插入模板": false,
+      "command-palette:打开命令面板": false,
+      "bases:新建数据库": false
+    }
+  },
+  "active": "cccd63cf76ee9f7b",
+  "lastOpenFiles": [
+    "第1章 像素初现/1.11 帧缓冲.md",
+    "第1章 像素初现/1.1 项目骨架.md",
+    "第1章 像素初现/1.2 开窗.md",
+    "第1章 像素初现/1.3 Vulkan 实例.md",
+    "第1章 像素初现/1.4 调试信使.md",
+    "第1章 像素初现/1.6 物理设备.md",
+    "第1章 像素初现/1.7 逻辑设备与队列.md",
+    "第1章 像素初现/1.5 窗口表面.md",
+    "关卡设计规范.md",
+    "关卡总览.md",
+    "第1章 像素初现/章节总览.md",
+    "第1章 像素初现/1.8 交换链.md",
+    "第1章 像素初现/1.13 同步原语.md",
+    "_write_puzzles.py",
+    "_write_chapter.py",
+    "第1章 像素初现/1.16 Window 类封装.md",
+    "第1章 像素初现/1.14 渲染循环.md",
+    "第1章 像素初现/1.9 图像视图.md",
+    "第1章 像素初现/1.15 交换链重建.md",
+    "第1章 像素初现/1.12 命令池与命令缓冲.md",
+    "第1章 像素初现/1.10 渲染通道.md",
+    "第1章 像素初现",
+    "项目提示词.md"
+  ]
+}

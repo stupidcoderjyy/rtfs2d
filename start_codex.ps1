@@ -1,0 +1,1 @@
+C:\Users\PC\moon-bridge\scripts\start_codex_with_moonbridge.ps1 -ProjectDirectory C:\Users\PC\CLionProjects\rtfs2d
