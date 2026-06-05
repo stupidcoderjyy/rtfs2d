@@ -4,9 +4,9 @@
 
 #ifndef RTFS2D_WINDOW_H
 #define RTFS2D_WINDOW_H
-#include <cstdint>
 #include <string>
 #include <GLFW/glfw3.h>
+#include <vulkan/vulkan_raii.hpp>
 
 namespace rtfs2d {
 
@@ -18,6 +18,9 @@ private:
     int width_, height_;
     std::string title_;
     GLFWwindow* window_{};
+    std::unique_ptr<vk::raii::Instance> instance_;
+
+    void CreateVkInstance();
 };
 
 }

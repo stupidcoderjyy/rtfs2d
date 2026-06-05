@@ -10,4 +10,5 @@ add_library(rtfs2d::core ALIAS ${TARGET})
 target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(${TARGET} PRIVATE
         glfw
+        Vulkan::Vulkan
 )
