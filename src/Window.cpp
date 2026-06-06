@@ -36,6 +36,7 @@ void Window::Show() {
     CreateRenderPass();
     CreateFrameBuffers();
     CreateCommandPoolAndBuffers();
+    CreateSyncObjects();
     // 主循环
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
@@ -415,5 +416,21 @@ void Window::CreateCommandPoolAndBuffers() {
         cb.beginRenderPass(bi, vk::SubpassContents::eInline);        // 开始渲染通道
         cb.endRenderPass();                                           // 结束渲染通道
         cb.end();                                                     // 结束录制
+    }
+}
+
+void Window::CreateSyncObjects() {
+    vk::FenceCreateInfo ci{};
+    ci.setFlags(vk::FenceCreateFlagBits::eSignaled);
+    for (int i = 0; i < kMaxFramesInFlight; ++i) {
+        image_available_semaphores_.push_back(
+            std::make_unique<vk::raii::Semaphore>(device_->createSemaphore({}))
+        );
+        render_finished_semaphores_.push_back(
+            std::make_unique<vk::raii::Semaphore>(device_->createSemaphore({}))
+        );
+        in_flight_fences_.push_back(
+            std::make_unique<vk::raii::Fence>(device_->createFence(ci))
+        );
     }
 }
