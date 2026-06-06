@@ -35,6 +35,7 @@ private:
     vk::ColorSpaceKHR swapchain_color_space_{};
     vk::Extent2D swapchain_extent_;
     std::vector<vk::Image> swapchain_images_;
+    std::vector<std::unique_ptr<vk::raii::ImageView>> swapchain_image_views_;
 
     void CreateVkInstance();
     std::vector<const char*> GetEnabledExtensions();
@@ -46,6 +47,7 @@ private:
     void CheckPhysicalDevice();
     void CreateLogicalDevice();
     void CreateSwapChain();
+    void CreateImageViews();
 };
 
 }

@@ -32,6 +32,7 @@ void Window::Show() {
     CheckPhysicalDevice();
     CreateLogicalDevice();
     CreateSwapChain();
+    CreateImageViews();
     // 主循环
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
@@ -316,4 +317,19 @@ void Window::CreateSwapChain() {
     swapchain_ = std::make_unique<vk::raii::SwapchainKHR>(*device_, ci);
     // 获取交换链中的图像数组
     swapchain_images_ = swapchain_->getImages();
+}
+
+void Window::CreateImageViews() {
+    for (const auto& img : swapchain_images_) {
+        vk::ImageViewCreateInfo ci{};
+        ci.setImage(img)
+            .setViewType(vk::ImageViewType::e2D)
+            .setFormat(swapchain_image_format_)
+            .setSubresourceRange({
+                vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1
+            });
+        swapchain_image_views_.push_back(
+            std::make_unique<vk::raii::ImageView>(device_->createImageView(ci))
+        );
+    }
 }
