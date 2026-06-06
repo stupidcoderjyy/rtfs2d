@@ -33,6 +33,7 @@ void Window::Show() {
     CreateLogicalDevice();
     CreateSwapChain();
     CreateImageViews();
+    CreateRenderPass();
     // 主循环
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
@@ -332,4 +333,38 @@ void Window::CreateImageViews() {
             std::make_unique<vk::raii::ImageView>(device_->createImageView(ci))
         );
     }
+}
+
+void Window::CreateRenderPass() {
+    // 定义一个颜色附件：像素格式与交换链一致
+    vk::AttachmentDescription attachments[]{{}};
+    attachments[0].setFormat(swapchain_image_format_)
+        .setSamples(vk::SampleCountFlagBits::e1)            // 不使用多重采样
+        .setLoadOp(vk::AttachmentLoadOp::eClear)            // 渲染前清空附件
+        .setStoreOp(vk::AttachmentStoreOp::eStore)          // 渲染后保留结果，供呈现用
+        .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)  // 不使用模板缓冲
+        .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
+        .setInitialLayout(vk::ImageLayout::eUndefined)      // 渲染前布局无关
+        .setFinalLayout(vk::ImageLayout::ePresentSrcKHR);   // 渲染后转为呈现布局
+
+    // subpass 中引用附件的描述：索引 0，布局为颜色附件最优
+    vk::AttachmentReference ar{};
+    ar.setAttachment(0)
+        .setLayout(vk::ImageLayout::eColorAttachmentOptimal);
+
+    // 定义一个图形 subpass，引用上述颜色附件
+    vk::SubpassDescription subpasses[]{{}};
+    subpasses[0].setPipelineBindPoint(vk::PipelineBindPoint::eGraphics)
+        .setColorAttachmentCount(1)
+        .setPColorAttachments(&ar);
+
+    // 组装渲染通道创建信息
+    vk::RenderPassCreateInfo ci{};
+    ci.setAttachmentCount(1)
+        .setPAttachments(attachments)
+        .setSubpassCount(1)
+        .setPSubpasses(subpasses);
+
+    // 创建 RAII 渲染通道，析构时自动销毁
+    render_pass_ = std::make_unique<vk::raii::RenderPass>(device_->createRenderPass(ci));
 }
