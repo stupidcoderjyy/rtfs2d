@@ -64,7 +64,7 @@ private:
     void CreateCommandPoolAndBuffers();
     void CreateSyncObjects();
 
-    void RecordCommands(const vk::raii::CommandBuffer& cb, int img_idx);
+    void RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t img_idx);
 };
 
 }

@@ -16,78 +16,89 @@ Window::Window(int width, int height, std::string title, bool debug_enabled):
         width_(width), height_(height), title_(std::move(title)), debug_enabled_(debug_enabled) {}
 
 void Window::Show() {
-    if (!glfwInit()) {
-        throw std::runtime_error("Failed to initialize GLFW");
-    }
-    auto glfw_guard = std::shared_ptr<void>(nullptr, [](...) {
-        glfwTerminate();
-    });
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    CreateVkInstance();
-    window_ = glfwCreateWindow(width_, height_, title_.c_str(), nullptr, nullptr);
-    auto window_guard = std::shared_ptr<void>(nullptr, [this](...) {
-        glfwDestroyWindow(window_);
-    });
-    CreateWindowSurface();
-    CheckPhysicalDevice();
-    CreateLogicalDevice();
-    CreateSwapChain();
-    CreateImageViews();
-    CreateRenderPass();
-    CreateFrameBuffers();
-    CreateCommandPoolAndBuffers();
-    CreateSyncObjects();
-    // 主循环
-    while (!glfwWindowShouldClose(window_)) {
-        auto& cb = command_buffers_[current_frame_];
-        auto& fence = in_flight_fences_[current_frame_];
-        auto& acquire_sem = image_available_semaphores_[current_frame_];
-
-        // 当CPU运行速度过快，达到kMaxFramesInFlight的限制时，必须等待GPU完成该帧的渲染，才能进行下一次提交
-        // 需要为每个飞行帧准备独立的fence
-        // 当渲染速度较慢时，会在这里阻塞
-        if (device_->waitForFences(**fence, VK_TRUE, UINT64_MAX) != vk::Result::eSuccess) {
-            throw std::runtime_error("Failed to acquire fences");
+    try {
+        if (!glfwInit()) {
+            throw std::runtime_error("Failed to initialize GLFW");
         }
-        device_->resetFences(**fence);
+        auto glfw_guard = std::shared_ptr<void>(nullptr, [](...) {
+            glfwTerminate();
+        });
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        CreateVkInstance();
+        window_ = glfwCreateWindow(width_, height_, title_.c_str(), nullptr, nullptr);
+        auto window_guard = std::shared_ptr<void>(nullptr, [this](...) {
+            glfwDestroyWindow(window_);
+        });
+        CreateWindowSurface();
+        CheckPhysicalDevice();
+        CreateLogicalDevice();
+        CreateSwapChain();
+        CreateImageViews();
+        CreateRenderPass();
+        CreateFrameBuffers();
+        CreateCommandPoolAndBuffers();
+        CreateSyncObjects();
+        // 主循环
+        while (!glfwWindowShouldClose(window_)) {
+            auto& cb = command_buffers_[current_frame_];
+            auto& fence = in_flight_fences_[current_frame_];
+            auto& acquire_sem = image_available_semaphores_[current_frame_];
 
-        // 尝试从交换链获取一张处于空闲状态图像的所有权
-        // 一张图片可能有六个状态：空闲状态 → 被CPU占用 → 处于渲染队列 → 正在渲染 → 处于呈现队列 → 正在呈现
-        // acquire_sem用于GPU端图形队列和呈现队列之间进行同步，避免对未完成呈现（只读）的图片进行渲染（写）
-        // GPU端最多只有kMaxFramesInFlight张图片处于未完成渲染的状态，acquire_sem和kMaxFramesInFlight绑定
-        // 当呈现速度较慢时，会在这里阻塞
-        auto img_idx = swapchain_->acquireNextImage(UINT64_MAX, **acquire_sem).value;
+            // 当CPU运行速度过快，达到kMaxFramesInFlight的限制时，必须等待GPU完成该帧的渲染，才能进行下一次提交
+            // 需要为每个飞行帧准备独立的fence
+            // 当渲染速度较慢时，会在这里阻塞
+            if (auto result = device_->waitForFences(**in_flight_fences_[current_frame_], VK_TRUE, UINT64_MAX);
+                    result != vk::Result::eSuccess) {
+                throw std::runtime_error("waitForFences failed: " + std::to_string(static_cast<int>(result)));
+            }
+            device_->resetFences(**fence);
 
-        // 重新录制命令
-        RecordCommands(cb, img_idx);
+            // 尝试从交换链获取一张处于空闲状态图像的所有权
+            // 一张图片可能有六个状态：空闲状态 → 被CPU占用 → 处于渲染队列 → 正在渲染 → 处于呈现队列 → 正在呈现
+            // acquire_sem用于GPU端图形队列和呈现队列之间进行同步，避免对未完成呈现（只读）的图片进行渲染（写）
+            // GPU端最多只有kMaxFramesInFlight张图片处于未完成渲染的状态，acquire_sem和kMaxFramesInFlight绑定
+            // 当呈现速度较慢时，会在这里阻塞
+            auto img_idx = swapchain_->acquireNextImage(UINT64_MAX, **acquire_sem).value;
 
-        // 提交命令缓冲区。GPU会等待，直到图像就绪（acquire_sem被激活），CPU端会立刻返回，并准备下一帧的内容
-        // 需要为每个飞行帧准备独立的acquire_sem
-        // render_sem的作用是在GPU端图形队列和呈现队列之间进行同步，避免把未完成渲染的图片输出到屏幕
-        // 需要为每张交换链图像准备一个独立的render_sem
-        vk::PipelineStageFlags stage_flags = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-        auto& render_sem = render_finished_semaphores_[img_idx];
-        vk::SubmitInfo si{};
-        si.setWaitSemaphores(**acquire_sem)
-          .setWaitDstStageMask(stage_flags)
-          .setSignalSemaphores(**render_sem)
-          .setCommandBuffers(*cb);
-        graphics_queue_->submit(si, **fence);
+            // 重新录制命令
+            RecordCommands(cb, img_idx);
 
-        // 将图像加入呈现队列。呈现和渲染是GPU中两个独立的模块，每张图片基于render_sem进行同步
-        vk::PresentInfoKHR pi{};
-        pi.setWaitSemaphores(**render_sem)
-          .setSwapchains(**swapchain_)
-          .setImageIndices(img_idx);
-        if (present_queue_->presentKHR(pi) != vk::Result::eSuccess) {
-            throw std::runtime_error("Failed to present fences");
+            // 提交命令缓冲区。GPU会等待，直到图像就绪（acquire_sem被激活），CPU端会立刻返回，并准备下一帧的内容
+            // 需要为每个飞行帧准备独立的acquire_sem
+            // render_sem的作用是在GPU端图形队列和呈现队列之间进行同步，避免把未完成渲染的图片输出到屏幕
+            // 需要为每张交换链图像准备一个独立的render_sem
+            vk::PipelineStageFlags stage_flags = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+            auto& render_sem = render_finished_semaphores_[img_idx];
+            vk::SubmitInfo si{};
+            si.setWaitSemaphores(**acquire_sem)
+              .setWaitDstStageMask(stage_flags)
+              .setSignalSemaphores(**render_sem)
+              .setCommandBuffers(*cb);
+            graphics_queue_->submit(si, **fence);
+
+            // 将图像加入呈现队列。呈现和渲染是GPU中两个独立的模块，每张图片基于render_sem进行同步
+            vk::PresentInfoKHR pi{};
+            pi.setWaitSemaphores(**render_sem)
+              .setSwapchains(**swapchain_)
+              .setImageIndices(img_idx);
+
+
+            if (auto result = present_queue_->presentKHR(pi); result != vk::Result::eSuccess) {
+                spdlog::warn("presentKHR returned {}", vk::to_string(result));
+            }
+
+            // 更新帧索引
+            current_frame_ = (current_frame_ + 1) % kMaxFramesInFlight;
+            glfwPollEvents();
         }
-
-        // 更新帧索引
-        current_frame_ = (current_frame_ + 1) % kMaxFramesInFlight;
-        glfwPollEvents();
+        device_->waitIdle();
+    } catch (const std::exception& e) {
+        spdlog::error("Show() failed: {}", e.what());
+        if (device_) {
+            device_->waitIdle();
+        }
+        throw;
     }
-    device_->waitIdle();
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
@@ -469,7 +480,7 @@ void Window::CreateSyncObjects() {
     }
 }
 
-void Window::RecordCommands(const vk::raii::CommandBuffer &cb, int img_idx) {
+void Window::RecordCommands(const vk::raii::CommandBuffer &cb, uint32_t img_idx) {
     cb.begin({});
     vk::ImageMemoryBarrier barrier{};
     vk::ImageSubresourceRange sr{};
@@ -497,7 +508,7 @@ void Window::RecordCommands(const vk::raii::CommandBuffer &cb, int img_idx) {
     // 获取程序启动以来的秒数（高精度）
     double time = glfwGetTime();
     // 控制颜色循环速度：2*pi 弧度对应一个完整周期，这里用 1.5 弧度每秒，约 4.2 秒一个循环
-    float hue = static_cast<float>(time * 1.5);  // 1.5 弧度/秒，周期 ≈ 4.18879 秒
+    auto hue = static_cast<float>(time * 1.5);  // 1.5 弧度/秒，周期 ≈ 4.18879 秒
     // 从 hue 计算 RGB（简单正弦波，三通道相位差 120 度）
     float r = (std::sin(hue) + 1.0f) / 2.0f;
     float g = (std::sin(hue + 2.09439f) + 1.0f) / 2.0f;   // +120°
