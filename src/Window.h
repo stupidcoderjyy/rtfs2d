@@ -41,11 +41,12 @@ private:
     std::unique_ptr<vk::raii::CommandPool> command_pool_;
     std::vector<vk::raii::CommandBuffer> command_buffers_;
     //限制同时处于飞行状态的帧数，避免 CPU 超前 GPU 过多
-    static constexpr int kMaxFramesInFlight = 2;
-    std::vector<std::unique_ptr<vk::raii::Semaphore>> image_available_semaphores_;
+    static constexpr uint32_t kMaxFramesInFlight = 2;
+    std::array<std::unique_ptr<vk::raii::Semaphore>, kMaxFramesInFlight> image_available_semaphores_;
     std::vector<std::unique_ptr<vk::raii::Semaphore>> render_finished_semaphores_;
-    std::vector<std::unique_ptr<vk::raii::Fence>> in_flight_fences_;
+    std::array<std::unique_ptr<vk::raii::Fence>, kMaxFramesInFlight> in_flight_fences_;
     size_t current_frame_ = 0;
+    std::vector<vk::ImageLayout> image_layouts_;
 
     void CreateVkInstance();
     std::vector<const char*> GetEnabledExtensions();
@@ -62,6 +63,8 @@ private:
     void CreateFrameBuffers();
     void CreateCommandPoolAndBuffers();
     void CreateSyncObjects();
+
+    void RecordCommands(const vk::raii::CommandBuffer& cb, int img_idx);
 };
 
 }

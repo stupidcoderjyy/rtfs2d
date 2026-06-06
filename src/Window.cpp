@@ -39,8 +39,55 @@ void Window::Show() {
     CreateSyncObjects();
     // 主循环
     while (!glfwWindowShouldClose(window_)) {
+        auto& cb = command_buffers_[current_frame_];
+        auto& fence = in_flight_fences_[current_frame_];
+        auto& acquire_sem = image_available_semaphores_[current_frame_];
+
+        // 当CPU运行速度过快，达到kMaxFramesInFlight的限制时，必须等待GPU完成该帧的渲染，才能进行下一次提交
+        // 需要为每个飞行帧准备独立的fence
+        // 当渲染速度较慢时，会在这里阻塞
+        if (device_->waitForFences(**fence, VK_TRUE, UINT64_MAX) != vk::Result::eSuccess) {
+            throw std::runtime_error("Failed to acquire fences");
+        }
+        device_->resetFences(**fence);
+
+        // 尝试从交换链获取一张处于空闲状态图像的所有权
+        // 一张图片可能有六个状态：空闲状态 → 被CPU占用 → 处于渲染队列 → 正在渲染 → 处于呈现队列 → 正在呈现
+        // acquire_sem用于GPU端图形队列和呈现队列之间进行同步，避免对未完成呈现（只读）的图片进行渲染（写）
+        // GPU端最多只有kMaxFramesInFlight张图片处于未完成渲染的状态，acquire_sem和kMaxFramesInFlight绑定
+        // 当呈现速度较慢时，会在这里阻塞
+        auto img_idx = swapchain_->acquireNextImage(UINT64_MAX, **acquire_sem).value;
+
+        // 重新录制命令
+        RecordCommands(cb, img_idx);
+
+        // 提交命令缓冲区。GPU会等待，直到图像就绪（acquire_sem被激活），CPU端会立刻返回，并准备下一帧的内容
+        // 需要为每个飞行帧准备独立的acquire_sem
+        // render_sem的作用是在GPU端图形队列和呈现队列之间进行同步，避免把未完成渲染的图片输出到屏幕
+        // 需要为每张交换链图像准备一个独立的render_sem
+        vk::PipelineStageFlags stage_flags = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+        auto& render_sem = render_finished_semaphores_[img_idx];
+        vk::SubmitInfo si{};
+        si.setWaitSemaphores(**acquire_sem)
+          .setWaitDstStageMask(stage_flags)
+          .setSignalSemaphores(**render_sem)
+          .setCommandBuffers(*cb);
+        graphics_queue_->submit(si, **fence);
+
+        // 将图像加入呈现队列。呈现和渲染是GPU中两个独立的模块，每张图片基于render_sem进行同步
+        vk::PresentInfoKHR pi{};
+        pi.setWaitSemaphores(**render_sem)
+          .setSwapchains(**swapchain_)
+          .setImageIndices(img_idx);
+        if (present_queue_->presentKHR(pi) != vk::Result::eSuccess) {
+            throw std::runtime_error("Failed to present fences");
+        }
+
+        // 更新帧索引
+        current_frame_ = (current_frame_ + 1) % kMaxFramesInFlight;
         glfwPollEvents();
     }
+    device_->waitIdle();
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
@@ -296,6 +343,7 @@ void Window::CreateSwapChain() {
         min_img_count = capabilities.maxImageCount;
     }
     ci.setMinImageCount(min_img_count);
+    spdlog::info("minImageCount: {}, maxImageCount: {}", min_img_count, capabilities.maxImageCount);
 
     // 交换链图像将作为颜色附件进行渲染
     ci.setImageUsage(vk::ImageUsageFlagBits::eColorAttachment);
@@ -321,6 +369,7 @@ void Window::CreateSwapChain() {
     swapchain_ = std::make_unique<vk::raii::SwapchainKHR>(*device_, ci);
     // 获取交换链中的图像数组
     swapchain_images_ = swapchain_->getImages();
+    image_layouts_.resize(swapchain_images_.size(), vk::ImageLayout::eUndefined);
 }
 
 void Window::CreateImageViews() {
@@ -347,7 +396,7 @@ void Window::CreateRenderPass() {
         .setStoreOp(vk::AttachmentStoreOp::eStore)          // 渲染后保留结果，供呈现用
         .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)  // 不使用模板缓冲
         .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
-        .setInitialLayout(vk::ImageLayout::eUndefined)      // 渲染前布局无关
+        .setInitialLayout(vk::ImageLayout::eColorAttachmentOptimal)
         .setFinalLayout(vk::ImageLayout::ePresentSrcKHR);   // 渲染后转为呈现布局
 
     // subpass 中引用附件的描述：索引 0，布局为颜色附件最优
@@ -392,45 +441,77 @@ void Window::CreateFrameBuffers() {
 void Window::CreateCommandPoolAndBuffers() {
     // 创建命令池，指定提交到 graphics 队列族
     vk::CommandPoolCreateInfo ci{};
-    ci.setQueueFamilyIndex(graphics_queue_family_index_);
+    ci.setQueueFamilyIndex(graphics_queue_family_index_)
+        .setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer);
     command_pool_ = std::make_unique<vk::raii::CommandPool>(device_->createCommandPool(ci));
 
     // 从命令池分配命令缓冲，数量与帧缓冲一致
     vk::CommandBufferAllocateInfo ai{};
     ai.setCommandPool(*command_pool_)
-        .setCommandBufferCount(swapchain_image_views_.size())  // 与帧缓冲数量一致
+        .setCommandBufferCount(kMaxFramesInFlight)             // 和“飞行帧”数量一致
         .setLevel(vk::CommandBufferLevel::ePrimary);           // 主命令缓冲
     command_buffers_ = device_->allocateCommandBuffers(ai);
-
-    // 为每个帧缓冲录制清屏指令
-    for (int i = 0; i < command_buffers_.size(); ++i) {
-        const auto& cb = command_buffers_[i];
-        cb.begin({});                              // 开始录制
-        vk::ClearValue clear_value{{0.1f, 0.15f, 0.2f, 1.0f}};  // 深蓝灰清屏颜色
-        vk::RenderPassBeginInfo bi{};
-        bi.setRenderPass(*render_pass_)                               // 渲染通道
-            .setFramebuffer(*framebuffers_[i])                        // 对应的帧缓冲
-            .setRenderArea({{0, 0, swapchain_extent_.width, swapchain_extent_.height}})  // 覆盖整个交换链
-            .setClearValueCount(1)                                    // 清除值数量
-            .setPClearValues(&clear_value);                           // 清除值
-        cb.beginRenderPass(bi, vk::SubpassContents::eInline);        // 开始渲染通道
-        cb.endRenderPass();                                           // 结束渲染通道
-        cb.end();                                                     // 结束录制
-    }
 }
 
 void Window::CreateSyncObjects() {
     vk::FenceCreateInfo ci{};
     ci.setFlags(vk::FenceCreateFlagBits::eSignaled);
     for (int i = 0; i < kMaxFramesInFlight; ++i) {
-        image_available_semaphores_.push_back(
-            std::make_unique<vk::raii::Semaphore>(device_->createSemaphore({}))
-        );
+        image_available_semaphores_[i] =
+            std::make_unique<vk::raii::Semaphore>(device_->createSemaphore({}));
+        in_flight_fences_[i] =
+            std::make_unique<vk::raii::Fence>(device_->createFence(ci));
+    }
+    for (int i = 0; i < swapchain_images_.size(); ++i) {
         render_finished_semaphores_.push_back(
             std::make_unique<vk::raii::Semaphore>(device_->createSemaphore({}))
         );
-        in_flight_fences_.push_back(
-            std::make_unique<vk::raii::Fence>(device_->createFence(ci))
-        );
     }
+}
+
+void Window::RecordCommands(const vk::raii::CommandBuffer &cb, int img_idx) {
+    cb.begin({});
+    vk::ImageMemoryBarrier barrier{};
+    vk::ImageSubresourceRange sr{};
+    sr.setAspectMask(vk::ImageAspectFlagBits::eColor)
+        .setBaseMipLevel(0)
+        .setLevelCount(1)
+        .setBaseArrayLayer(0)
+        .setLayerCount(1);
+    barrier.setImage(swapchain_images_[img_idx])
+        .setOldLayout(image_layouts_[img_idx])
+        .setNewLayout(vk::ImageLayout::eColorAttachmentOptimal)
+        .setSrcAccessMask(vk::AccessFlagBits::eNone)
+        .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite)
+        .setSubresourceRange(sr)
+        .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+        .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
+    cb.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
+        vk::PipelineStageFlagBits::eColorAttachmentOutput,
+        {}, nullptr, nullptr, barrier);
+
+    // 帧计数器，每录制一次自增
+    static uint64_t frame_counter = 0;
+    ++frame_counter;
+
+    // 获取程序启动以来的秒数（高精度）
+    double time = glfwGetTime();
+    // 控制颜色循环速度：2*pi 弧度对应一个完整周期，这里用 1.5 弧度每秒，约 4.2 秒一个循环
+    float hue = static_cast<float>(time * 1.5);  // 1.5 弧度/秒，周期 ≈ 4.18879 秒
+    // 从 hue 计算 RGB（简单正弦波，三通道相位差 120 度）
+    float r = (std::sin(hue) + 1.0f) / 2.0f;
+    float g = (std::sin(hue + 2.09439f) + 1.0f) / 2.0f;   // +120°
+    float b = (std::sin(hue + 4.18879f) + 1.0f) / 2.0f;   // +240°
+    vk::ClearValue clear_value{{r, g, b, 1.0f}};
+
+    vk::RenderPassBeginInfo bi{};
+    bi.setRenderPass(*render_pass_)                               // 渲染通道
+        .setFramebuffer(*framebuffers_[img_idx])                  // 对应的帧缓冲
+        .setRenderArea({{0, 0, swapchain_extent_.width, swapchain_extent_.height}})  // 覆盖整个交换链
+        .setClearValueCount(1)                                    // 清除值数量
+        .setPClearValues(&clear_value);                           // 清除值
+    cb.beginRenderPass(bi, vk::SubpassContents::eInline);         // 开始渲染通道
+    cb.endRenderPass();                                           // 结束渲染通道
+    cb.end();
+    image_layouts_[img_idx] = vk::ImageLayout::ePresentSrcKHR;
 }
