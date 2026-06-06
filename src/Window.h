@@ -30,6 +30,11 @@ private:
     std::unique_ptr<vk::raii::Device> device_;
     std::unique_ptr<vk::raii::Queue> graphics_queue_;
     std::unique_ptr<vk::raii::Queue> present_queue_;
+    std::unique_ptr<vk::raii::SwapchainKHR> swapchain_;
+    vk::Format swapchain_image_format_{};
+    vk::ColorSpaceKHR swapchain_color_space_{};
+    vk::Extent2D swapchain_extent_;
+    std::vector<vk::Image> swapchain_images_;
 
     void CreateVkInstance();
     std::vector<const char*> GetEnabledExtensions();
@@ -40,7 +45,7 @@ private:
     void CreateWindowSurface();
     void CheckPhysicalDevice();
     void CreateLogicalDevice();
-
+    void CreateSwapChain();
 };
 
 }

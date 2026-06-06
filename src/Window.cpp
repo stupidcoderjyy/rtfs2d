@@ -31,6 +31,7 @@ void Window::Show() {
     CreateWindowSurface();
     CheckPhysicalDevice();
     CreateLogicalDevice();
+    CreateSwapChain();
     // 主循环
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
@@ -42,7 +43,11 @@ VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
         vk::DebugUtilsMessageTypeFlagsEXT type,
         const vk::DebugUtilsMessengerCallbackDataEXT* data,
         void* user_data) {
-    spdlog::warn("[Vulkan] {}", data->pMessage);
+    if (severity == vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning) {
+        spdlog::warn("[Vulkan] {}", data->pMessage);
+    } else if (severity == vk::DebugUtilsMessageSeverityFlagBitsEXT::eError) {
+        spdlog::error("[Vulkan] {}", data->pMessage);
+    }
     return VK_FALSE;
 }
 
@@ -233,4 +238,82 @@ void Window::CreateLogicalDevice() {
         device_->getQueue(graphics_queue_family_index_, 0));
     present_queue_ = std::make_unique<vk::raii::Queue>(
         device_->getQueue(present_queue_family_index_, 0));
+}
+
+void Window::CreateSwapChain() {
+    vk::SwapchainCreateInfoKHR ci{};
+
+    // 指定交换链渲染的目标表面
+    ci.setSurface(*surface_);
+
+    // 查询 surface 的能力上限（最小/最大图像数量、当前窗口尺寸等）
+    auto capabilities = physical_device_.getSurfaceCapabilitiesKHR(*surface_);
+    vk::Extent2D ext = capabilities.currentExtent;  // 当前窗口尺寸
+    // 若窗口系统不提供固定尺寸（currentExtent 为 UINT32_MAX），则用构造参数手动 clamp
+    if (ext.width == UINT32_MAX) {
+        ext.width = std::clamp(
+            static_cast<uint32_t>(width_),
+            capabilities.minImageExtent.width,
+            capabilities.maxImageExtent.width);
+        ext.height = std::clamp(
+            static_cast<uint32_t>(height_),
+            capabilities.minImageExtent.height,
+            capabilities.maxImageExtent.height);
+    }
+    swapchain_extent_ = ext;
+    ci.setImageExtent(swapchain_extent_);
+
+    // 查询 surface 支持的像素格式和色彩空间，优先选择 sRGB
+    auto formats = physical_device_.getSurfaceFormatsKHR(*surface_);
+    auto it = std::ranges::find_if(formats, [](const auto& fmt) {
+        return fmt.format == vk::Format::eB8G8R8A8Srgb && fmt.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
+    });
+    // 若首选格式不存在，取列表第一个作为降级方案
+    vk::SurfaceFormatKHR format = it != formats.end() ? *it : formats[0];
+    swapchain_image_format_ = format.format;
+    swapchain_color_space_ = format.colorSpace;
+    ci.setImageFormat(swapchain_image_format_).setImageColorSpace(swapchain_color_space_);
+
+    // 选择 FIFO 呈现模式（V-Sync），所有 Vulkan 实现必须支持
+    constexpr auto present_mode = vk::PresentModeKHR::eFifo;
+    if (auto modes = physical_device_.getSurfacePresentModesKHR(*surface_);
+            std::ranges::find(modes, present_mode) == modes.end()) {
+        throw std::runtime_error("No suitable present mode found");
+    }
+    ci.setPresentMode(present_mode);
+
+    // 图像层数，普通 2D 应用设为 1
+    ci.setImageArrayLayers(1);
+
+    // 最少图像数量：minImageCount + 1 以减少等待，但不超 maxImageCount
+    uint32_t min_img_count = capabilities.minImageCount + 1;
+    if (capabilities.maxImageCount > 0 && min_img_count > capabilities.maxImageCount) {
+        min_img_count = capabilities.maxImageCount;
+    }
+    ci.setMinImageCount(min_img_count);
+
+    // 交换链图像将作为颜色附件进行渲染
+    ci.setImageUsage(vk::ImageUsageFlagBits::eColorAttachment);
+
+    // 使用 surface 的当前变换（旋转等），不做额外处理
+    ci.setPreTransform(capabilities.currentTransform);
+
+    // 窗口与桌面合成时不透明
+    ci.setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque);
+
+    // 允许 Vulkan 裁剪被遮挡的像素
+    ci.setClipped(VK_TRUE);
+
+    // 若 graphics 和 present 是同一队列族，使用独占模式；否则使用并发模式
+    if (graphics_queue_family_index_ == present_queue_family_index_) {
+        ci.setImageSharingMode(vk::SharingMode::eExclusive);
+    } else {
+        uint32_t indices[] = { graphics_queue_family_index_, present_queue_family_index_ };
+        ci.setImageSharingMode(vk::SharingMode::eConcurrent).setQueueFamilyIndices(indices);
+    }
+
+    // 创建 RAII 交换链，析构时自动销毁
+    swapchain_ = std::make_unique<vk::raii::SwapchainKHR>(*device_, ci);
+    // 获取交换链中的图像数组
+    swapchain_images_ = swapchain_->getImages();
 }
