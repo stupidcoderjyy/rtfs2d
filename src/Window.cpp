@@ -6,6 +6,7 @@
 
 #include <spdlog/spdlog.h>
 #include <memory>
+#include <set>
 #include <stdexcept>
 #include <vector>
 
@@ -29,6 +30,7 @@ void Window::Show() {
     });
     CreateWindowSurface();
     CheckPhysicalDevice();
+    CreateLogicalDevice();
     // 主循环
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
@@ -153,13 +155,13 @@ vk::DebugUtilsMessengerCreateInfoEXT Window::GetDebugMessengerCreateInfo() const
     using SeverityFlag = vk::DebugUtilsMessageSeverityFlagBitsEXT;
     using MsgTypeFlag = vk::DebugUtilsMessageTypeFlagBitsEXT;
     debug_info.setMessageSeverity(
-                SeverityFlag::eWarning |
-                SeverityFlag::eError)
-            .setMessageType(
-                MsgTypeFlag::eGeneral |
-                MsgTypeFlag::eValidation |
-                MsgTypeFlag::ePerformance)
-            .setPfnUserCallback(DebugCallback);
+            SeverityFlag::eWarning |
+            SeverityFlag::eError)
+        .setMessageType(
+            MsgTypeFlag::eGeneral |
+            MsgTypeFlag::eValidation |
+            MsgTypeFlag::ePerformance)
+        .setPfnUserCallback(DebugCallback);
     return debug_info;
 }
 
@@ -203,4 +205,32 @@ void Window::CheckPhysicalDevice() {
         }
     }
     throw std::runtime_error("No suitable physical device found");
+}
+
+//从选定的物理设备创建逻辑设备并获取队列句柄
+void Window::CreateLogicalDevice() {
+    std::set queue_families{
+        graphics_queue_family_index_, present_queue_family_index_
+    };
+    std::vector<vk::DeviceQueueCreateInfo> queue_create_infos;
+    float priority = 1.0f;
+    for (const auto& qf : queue_families) {
+        vk::DeviceQueueCreateInfo ci{};
+        ci.setQueueFamilyIndex(qf)
+            .setQueueCount(1)   //每个族只申请一个队
+            .setPQueuePriorities(&priority);
+        queue_create_infos.push_back(ci);
+    }
+    std::vector enabled_extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    vk::DeviceCreateInfo dci{};
+    dci.setQueueCreateInfoCount(queue_create_infos.size())
+        .setQueueCreateInfos(queue_create_infos)
+        .setEnabledExtensionCount(enabled_extensions.size())
+        .setPEnabledExtensionNames(enabled_extensions)
+        .setPEnabledFeatures(nullptr);
+    device_ = std::make_unique<vk::raii::Device>(physical_device_, dci);
+    graphics_queue_ = std::make_unique<vk::raii::Queue>(
+        device_->getQueue(graphics_queue_family_index_, 0));
+    present_queue_ = std::make_unique<vk::raii::Queue>(
+        device_->getQueue(present_queue_family_index_, 0));
 }
