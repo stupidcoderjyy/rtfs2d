@@ -5,8 +5,10 @@
 #ifndef RTFS2D_WINDOW_H
 #define RTFS2D_WINDOW_H
 #include <string>
-#include <GLFW/glfw3.h>
 #include <vulkan/vulkan_raii.hpp>
+#define GLFW_INCLUDE_NONE
+#include <functional>
+#include <GLFW/glfw3.h>
 
 namespace rtfs2d {
 
@@ -19,15 +21,17 @@ private:
     std::string title_;
     GLFWwindow* window_{};
     std::unique_ptr<vk::raii::Instance> instance_;
-
     bool debug_enabled_;
     std::unique_ptr<vk::raii::DebugUtilsMessengerEXT> debug_messenger_;
+    std::unique_ptr<vk::raii::SurfaceKHR> surface_;
 
-    void VkCreateInstance();
+    void CreateVkInstance();
     std::vector<const char*> GetEnabledExtensions();
     std::vector<const char*> GetEnabledValidationLayers();
     vk::ApplicationInfo GetApplicationInfo() const;
     vk::DebugUtilsMessengerCreateInfoEXT GetDebugMessengerCreateInfo() const;
+
+    void CreateWindowSurface();
 };
 
 }

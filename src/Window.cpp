@@ -22,11 +22,12 @@ void Window::Show() {
         glfwTerminate();
     });
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    VkCreateInstance();
+    CreateVkInstance();
     window_ = glfwCreateWindow(width_, height_, title_.c_str(), nullptr, nullptr);
     auto window_guard = std::shared_ptr<void>(nullptr, [this](...) {
         glfwDestroyWindow(window_);
     });
+    CreateWindowSurface();
     // 主循环
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
@@ -42,7 +43,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
     return VK_FALSE;
 }
 
-void Window::VkCreateInstance() {
+void Window::CreateVkInstance() {
     auto enabled_extensions = GetEnabledExtensions();
     auto enabled_layers = GetEnabledValidationLayers();
     auto app_info = GetApplicationInfo();
@@ -150,8 +151,21 @@ vk::DebugUtilsMessengerCreateInfoEXT Window::GetDebugMessengerCreateInfo() const
     vk::DebugUtilsMessengerCreateInfoEXT debug_info{};
     using SeverityFlag = vk::DebugUtilsMessageSeverityFlagBitsEXT;
     using MsgTypeFlag = vk::DebugUtilsMessageTypeFlagBitsEXT;
-    debug_info.setMessageSeverity(SeverityFlag::eWarning | SeverityFlag::eError)
-            .setMessageType(MsgTypeFlag::eGeneral | MsgTypeFlag::eValidation | MsgTypeFlag::ePerformance)
+    debug_info.setMessageSeverity(
+                SeverityFlag::eWarning |
+                SeverityFlag::eError)
+            .setMessageType(
+                MsgTypeFlag::eGeneral |
+                MsgTypeFlag::eValidation |
+                MsgTypeFlag::ePerformance)
             .setPfnUserCallback(DebugCallback);
     return debug_info;
+}
+
+void Window::CreateWindowSurface() {
+    VkSurfaceKHR surface;
+    if (glfwCreateWindowSurface(**instance_, window_, nullptr, &surface) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create window surface");
+    }
+    surface_ = std::make_unique<vk::raii::SurfaceKHR>(*instance_, surface);
 }
