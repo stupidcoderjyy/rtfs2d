@@ -35,6 +35,7 @@ void Window::Show() {
     CreateImageViews();
     CreateRenderPass();
     CreateFrameBuffers();
+    CreateCommandPoolAndBuffers();
     // 主循环
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
@@ -384,5 +385,35 @@ void Window::CreateFrameBuffers() {
         framebuffers_.push_back(
             std::make_unique<vk::raii::Framebuffer>(device_->createFramebuffer(ci))
         );
+    }
+}
+
+void Window::CreateCommandPoolAndBuffers() {
+    // 创建命令池，指定提交到 graphics 队列族
+    vk::CommandPoolCreateInfo ci{};
+    ci.setQueueFamilyIndex(graphics_queue_family_index_);
+    command_pool_ = std::make_unique<vk::raii::CommandPool>(device_->createCommandPool(ci));
+
+    // 从命令池分配命令缓冲，数量与帧缓冲一致
+    vk::CommandBufferAllocateInfo ai{};
+    ai.setCommandPool(*command_pool_)
+        .setCommandBufferCount(swapchain_image_views_.size())  // 与帧缓冲数量一致
+        .setLevel(vk::CommandBufferLevel::ePrimary);           // 主命令缓冲
+    command_buffers_ = device_->allocateCommandBuffers(ai);
+
+    // 为每个帧缓冲录制清屏指令
+    for (int i = 0; i < command_buffers_.size(); ++i) {
+        const auto& cb = command_buffers_[i];
+        cb.begin({});                              // 开始录制
+        vk::ClearValue clear_value{{0.1f, 0.15f, 0.2f, 1.0f}};  // 深蓝灰清屏颜色
+        vk::RenderPassBeginInfo bi{};
+        bi.setRenderPass(*render_pass_)                               // 渲染通道
+            .setFramebuffer(*framebuffers_[i])                        // 对应的帧缓冲
+            .setRenderArea({{0, 0, swapchain_extent_.width, swapchain_extent_.height}})  // 覆盖整个交换链
+            .setClearValueCount(1)                                    // 清除值数量
+            .setPClearValues(&clear_value);                           // 清除值
+        cb.beginRenderPass(bi, vk::SubpassContents::eInline);        // 开始渲染通道
+        cb.endRenderPass();                                           // 结束渲染通道
+        cb.end();                                                     // 结束录制
     }
 }

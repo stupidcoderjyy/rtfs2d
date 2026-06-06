@@ -38,6 +38,8 @@ private:
     std::vector<std::unique_ptr<vk::raii::ImageView>> swapchain_image_views_;
     std::unique_ptr<vk::raii::RenderPass> render_pass_;
     std::vector<std::unique_ptr<vk::raii::Framebuffer>> framebuffers_;
+    std::unique_ptr<vk::raii::CommandPool> command_pool_;
+    std::vector<vk::raii::CommandBuffer> command_buffers_;
 
     void CreateVkInstance();
     std::vector<const char*> GetEnabledExtensions();
@@ -52,6 +54,7 @@ private:
     void CreateImageViews();
     void CreateRenderPass();
     void CreateFrameBuffers();
+    void CreateCommandPoolAndBuffers();
 };
 
 }
