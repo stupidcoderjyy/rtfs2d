@@ -26,6 +26,13 @@ void Window::Show() {
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         CreateVkInstance();
         window_ = glfwCreateWindow(width_, height_, title_.c_str(), nullptr, nullptr);
+        glfwSetWindowUserPointer(window_, this);
+        glfwSetFramebufferSizeCallback(window_, [](GLFWwindow* win, int w, int h) {
+            auto* rtfs_win = static_cast<Window*>(glfwGetWindowUserPointer(win));
+            rtfs_win->frame_buffer_resized_ = true;
+            rtfs_win->width_ = w;
+            rtfs_win->height_ = h;
+        });
         auto window_guard = std::shared_ptr<void>(nullptr, [this](...) {
             glfwDestroyWindow(window_);
         });
@@ -37,9 +44,18 @@ void Window::Show() {
         CreateRenderPass();
         CreateFrameBuffers();
         CreateCommandPoolAndBuffers();
-        CreateSyncObjects();
+        CreateFrameBasedSyncObjects();
+        CreateImageBasedSyncObjects();
         // 主循环
         while (!glfwWindowShouldClose(window_)) {
+            if (frame_buffer_resized_) {
+                if (width_ == 0 || height_ == 0) {
+                    glfwWaitEvents();   //最小化时阻塞当前线程，恢复窗口后再重建交换链
+                } else {
+                    RecreateSwapChain();
+                }
+                continue;
+            }
             auto& cb = command_buffers_[current_frame_];
             auto& fence = in_flight_fences_[current_frame_];
             auto& acquire_sem = image_available_semaphores_[current_frame_];
@@ -58,7 +74,12 @@ void Window::Show() {
             // acquire_sem用于GPU端图形队列和呈现队列之间进行同步，避免对未完成呈现（只读）的图片进行渲染（写）
             // GPU端最多只有kMaxFramesInFlight张图片处于未完成渲染的状态，acquire_sem和kMaxFramesInFlight绑定
             // 当呈现速度较慢时，会在这里阻塞
-            auto img_idx = swapchain_->acquireNextImage(UINT64_MAX, **acquire_sem).value;
+            auto [res, img_idx] = swapchain_->acquireNextImage(UINT64_MAX, **acquire_sem);
+            if (res == vk::Result::eErrorOutOfDateKHR) {
+                spdlog::warn("failed to acquire image from swapchain, try recreate swapchain");
+                RecreateSwapChain();
+                continue;
+            }
 
             // 重新录制命令
             RecordCommands(cb, img_idx);
@@ -71,20 +92,21 @@ void Window::Show() {
             auto& render_sem = render_finished_semaphores_[img_idx];
             vk::SubmitInfo si{};
             si.setWaitSemaphores(**acquire_sem)
-              .setWaitDstStageMask(stage_flags)
-              .setSignalSemaphores(**render_sem)
-              .setCommandBuffers(*cb);
+                .setWaitDstStageMask(stage_flags)
+                .setSignalSemaphores(**render_sem)
+                .setCommandBuffers(*cb);
             graphics_queue_->submit(si, **fence);
 
             // 将图像加入呈现队列。呈现和渲染是GPU中两个独立的模块，每张图片基于render_sem进行同步
             vk::PresentInfoKHR pi{};
             pi.setWaitSemaphores(**render_sem)
-              .setSwapchains(**swapchain_)
-              .setImageIndices(img_idx);
-
-
-            if (auto result = present_queue_->presentKHR(pi); result != vk::Result::eSuccess) {
-                spdlog::warn("presentKHR returned {}", vk::to_string(result));
+                .setSwapchains(**swapchain_)
+                .setImageIndices(img_idx);
+            if (auto result = present_queue_->presentKHR(pi);
+                    result == vk::Result::eErrorOutOfDateKHR ||
+                    result == vk::Result::eSuboptimalKHR) {
+                spdlog::warn("failed to present image: {}, try recreate swapchain", static_cast<int>(result));
+                frame_buffer_resized_ = true;
             }
 
             // 更新帧索引
@@ -167,7 +189,7 @@ std::vector<const char*> Window::GetEnabledExtensions() {
 
     if (debug_supported) {
         enabled_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-        spdlog::info("VK_EXT_debug_utils enabled.");
+        spdlog::info("Debug utils extension enabled");
     } else {
         spdlog::warn("VK_EXT_debug_utils not supported; debug messenger will be disabled.");
         debug_enabled_ = false;
@@ -243,7 +265,7 @@ void Window::CreateWindowSurface() {
 
 //枚举物理设备并选定满足渲染需求的 GPU
 void Window::CheckPhysicalDevice() {
-    for (auto device : instance_->enumeratePhysicalDevices()) {
+    for (const auto& device : instance_->enumeratePhysicalDevices()) {
         //GPU 将功能按"族"分组。每个族内可以分配若干队列
         auto queue_families = device.getQueueFamilyProperties();
         std::optional<uint32_t> graphics_index, present_index;
@@ -268,7 +290,7 @@ void Window::CheckPhysicalDevice() {
             physical_device_ = device;
             graphics_queue_family_index_ = graphics_index.value();
             present_queue_family_index_ = present_index.value();
-            spdlog::info("Found suitable physical device: {}", std::string(device.getProperties().deviceName));
+            spdlog::info("Physical device: {}", std::string(device.getProperties().deviceName));
             return;
         }
     }
@@ -303,8 +325,12 @@ void Window::CreateLogicalDevice() {
         device_->getQueue(present_queue_family_index_, 0));
 }
 
-void Window::CreateSwapChain() {
+void Window::CreateSwapChain(bool replace) {
     vk::SwapchainCreateInfoKHR ci{};
+
+    if (replace) {
+        ci.setOldSwapchain(**swapchain_);
+    }
 
     // 指定交换链渲染的目标表面
     ci.setSurface(*surface_);
@@ -354,7 +380,6 @@ void Window::CreateSwapChain() {
         min_img_count = capabilities.maxImageCount;
     }
     ci.setMinImageCount(min_img_count);
-    spdlog::info("minImageCount: {}, maxImageCount: {}", min_img_count, capabilities.maxImageCount);
 
     // 交换链图像将作为颜色附件进行渲染
     ci.setImageUsage(vk::ImageUsageFlagBits::eColorAttachment);
@@ -380,7 +405,7 @@ void Window::CreateSwapChain() {
     swapchain_ = std::make_unique<vk::raii::SwapchainKHR>(*device_, ci);
     // 获取交换链中的图像数组
     swapchain_images_ = swapchain_->getImages();
-    image_layouts_.resize(swapchain_images_.size(), vk::ImageLayout::eUndefined);
+    image_layouts_ = std::vector(swapchain_images_.size(), vk::ImageLayout::eUndefined);
 }
 
 void Window::CreateImageViews() {
@@ -464,7 +489,7 @@ void Window::CreateCommandPoolAndBuffers() {
     command_buffers_ = device_->allocateCommandBuffers(ai);
 }
 
-void Window::CreateSyncObjects() {
+void Window::CreateFrameBasedSyncObjects() {
     vk::FenceCreateInfo ci{};
     ci.setFlags(vk::FenceCreateFlagBits::eSignaled);
     for (int i = 0; i < kMaxFramesInFlight; ++i) {
@@ -473,6 +498,9 @@ void Window::CreateSyncObjects() {
         in_flight_fences_[i] =
             std::make_unique<vk::raii::Fence>(device_->createFence(ci));
     }
+}
+
+void Window::CreateImageBasedSyncObjects() {
     for (int i = 0; i < swapchain_images_.size(); ++i) {
         render_finished_semaphores_.push_back(
             std::make_unique<vk::raii::Semaphore>(device_->createSemaphore({}))
@@ -525,4 +553,17 @@ void Window::RecordCommands(const vk::raii::CommandBuffer &cb, uint32_t img_idx)
     cb.endRenderPass();                                           // 结束渲染通道
     cb.end();
     image_layouts_[img_idx] = vk::ImageLayout::ePresentSrcKHR;
+}
+
+void Window::RecreateSwapChain() {
+    spdlog::warn("Recreate swapchain");
+    device_->waitIdle();
+    framebuffers_.clear();
+    swapchain_image_views_.clear();
+    render_finished_semaphores_.clear();
+    CreateSwapChain(true);
+    CreateImageViews();
+    CreateFrameBuffers();
+    CreateImageBasedSyncObjects();
+    frame_buffer_resized_ = false;
 }

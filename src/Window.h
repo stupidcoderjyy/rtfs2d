@@ -47,6 +47,7 @@ private:
     std::array<std::unique_ptr<vk::raii::Fence>, kMaxFramesInFlight> in_flight_fences_;
     size_t current_frame_ = 0;
     std::vector<vk::ImageLayout> image_layouts_;
+    bool frame_buffer_resized_ = false;
 
     void CreateVkInstance();
     std::vector<const char*> GetEnabledExtensions();
@@ -57,14 +58,15 @@ private:
     void CreateWindowSurface();
     void CheckPhysicalDevice();
     void CreateLogicalDevice();
-    void CreateSwapChain();
+    void CreateSwapChain(bool replace = false);
     void CreateImageViews();
     void CreateRenderPass();
     void CreateFrameBuffers();
     void CreateCommandPoolAndBuffers();
-    void CreateSyncObjects();
-
+    void CreateFrameBasedSyncObjects();
+    void CreateImageBasedSyncObjects();
     void RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t img_idx);
+    void RecreateSwapChain();
 };
 
 }
