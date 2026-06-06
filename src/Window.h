@@ -37,6 +37,7 @@ private:
     std::vector<vk::Image> swapchain_images_;
     std::vector<std::unique_ptr<vk::raii::ImageView>> swapchain_image_views_;
     std::unique_ptr<vk::raii::RenderPass> render_pass_;
+    std::vector<std::unique_ptr<vk::raii::Framebuffer>> framebuffers_;
 
     void CreateVkInstance();
     std::vector<const char*> GetEnabledExtensions();
@@ -50,6 +51,7 @@ private:
     void CreateSwapChain();
     void CreateImageViews();
     void CreateRenderPass();
+    void CreateFrameBuffers();
 };
 
 }

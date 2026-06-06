@@ -34,6 +34,7 @@ void Window::Show() {
     CreateSwapChain();
     CreateImageViews();
     CreateRenderPass();
+    CreateFrameBuffers();
     // 主循环
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
@@ -367,4 +368,21 @@ void Window::CreateRenderPass() {
 
     // 创建 RAII 渲染通道，析构时自动销毁
     render_pass_ = std::make_unique<vk::raii::RenderPass>(device_->createRenderPass(ci));
+}
+
+void Window::CreateFrameBuffers() {
+    // 为每个 swapchain image view 创建对应的帧缓冲
+    for (const auto& view : swapchain_image_views_) {
+        vk::FramebufferCreateInfo ci{};
+        ci.setRenderPass(*render_pass_)     // 帧缓冲兼容的渲染通道
+            .setAttachmentCount(1)          // 附件数量
+            .setPAttachments(&**view)       // 附件列表，解引用 RAII 句柄获取底层指针
+            .setWidth(swapchain_extent_.width)    // 帧缓冲宽度与交换链一致
+            .setHeight(swapchain_extent_.height)  // 帧缓冲高度与交换链一致
+            .setLayers(1);                  // 单层
+        // 创建 RAII 帧缓冲，析构时自动销毁
+        framebuffers_.push_back(
+            std::make_unique<vk::raii::Framebuffer>(device_->createFramebuffer(ci))
+        );
+    }
 }
