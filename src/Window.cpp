@@ -4,7 +4,7 @@
 
 #include "Window.h"
 
-#include <iostream>
+#include <spdlog/spdlog.h>
 #include <memory>
 #include <stdexcept>
 #include <vector>
@@ -40,7 +40,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
         vk::DebugUtilsMessageTypeFlagsEXT type,
         const vk::DebugUtilsMessengerCallbackDataEXT* data,
         void* user_data) {
-    std::cerr << "[Vulkan] " << data->pMessage << std::endl;
+    spdlog::warn("[Vulkan] {}", data->pMessage);
     return VK_FALSE;
 }
 
@@ -92,14 +92,14 @@ std::vector<const char*> Window::GetEnabledExtensions() {
             }
         }
     } catch (const vk::SystemError& e) {
-        std::cerr << "[ERROR] Failed to enumerate instance extensions: " << e.what() << std::endl;
+        spdlog::error("Failed to enumerate instance extensions: {}", e.what());
     }
 
     if (debug_supported) {
         enabled_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-        std::cout << "[INFO] VK_EXT_debug_utils enabled." << std::endl;
+        spdlog::info("VK_EXT_debug_utils enabled.");
     } else {
-        std::cerr << "[WARN] VK_EXT_debug_utils not supported; debug messenger will be disabled." << std::endl;
+        spdlog::warn("VK_EXT_debug_utils not supported; debug messenger will be disabled.");
         debug_enabled_ = false;
     }
     return enabled_extensions;
@@ -120,16 +120,16 @@ std::vector<const char*> Window::GetEnabledValidationLayers() {
             }
         }
     } catch (const vk::SystemError& e) {
-        std::cerr << "Failed to enumerate instance layers: " << e.what() << std::endl;
+        spdlog::error("Failed to enumerate instance layers: {}", e.what());
         // 继续，假设没有验证层
     }
 
     std::vector<const char*> enabled_layers;
     if (layer_available) {
         enabled_layers.push_back(kValidationLayer);
-        std::cout << "[INFO] Validation layer enabled" << std::endl;
+        spdlog::info("Validation layer enabled");
     } else {
-        std::cout << "[WARN] Validation layer not available, debug mode disabled" << std::endl;
+        spdlog::warn("Validation layer not available, debug mode disabled");
         debug_enabled_ = false;
     }
     return enabled_layers;
@@ -198,7 +198,7 @@ void Window::CheckPhysicalDevice() {
             physical_device_ = device;
             graphics_queue_family_index_ = graphics_index.value();
             present_queue_family_index_ = present_index.value();
-            std::cout << "[INFO] Found suitable physical device: " << device.getProperties().deviceName << std::endl;
+            spdlog::info("Found suitable physical device: {}", std::string(device.getProperties().deviceName));
             return;
         }
     }
