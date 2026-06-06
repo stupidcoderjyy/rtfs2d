@@ -28,6 +28,7 @@ void Window::Show() {
         glfwDestroyWindow(window_);
     });
     CreateWindowSurface();
+    CheckPhysicalDevice();
     // 主循环
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
@@ -168,4 +169,38 @@ void Window::CreateWindowSurface() {
         throw std::runtime_error("Failed to create window surface");
     }
     surface_ = std::make_unique<vk::raii::SurfaceKHR>(*instance_, surface);
+}
+
+//枚举物理设备并选定满足渲染需求的 GPU
+void Window::CheckPhysicalDevice() {
+    for (auto device : instance_->enumeratePhysicalDevices()) {
+        //GPU 将功能按"族"分组。每个族内可以分配若干队列
+        auto queue_families = device.getQueueFamilyProperties();
+        std::optional<uint32_t> graphics_index, present_index;
+        for (uint32_t i = 0; i < queue_families.size(); ++i) {
+            if (queue_families[i].queueFlags & vk::QueueFlagBits::eGraphics) {
+                graphics_index = i;
+            }
+            //查指定队列族是否支持向窗口表面呈现图像
+            if (device.getSurfaceSupportKHR(i, **surface_)) {
+                present_index = i;
+            }
+        }
+        // 向窗口渲染图像需要设备支持 `VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        bool has_swapchain = false;
+        for (const auto& ext : device.enumerateDeviceExtensionProperties()) {
+            if (std::strcmp(VK_KHR_SWAPCHAIN_EXTENSION_NAME, ext.extensionName) == 0) {
+                has_swapchain = true;
+                break;
+            }
+        }
+        if (has_swapchain && graphics_index.has_value() && present_index.has_value()) {
+            physical_device_ = device;
+            graphics_queue_family_index_ = graphics_index.value();
+            present_queue_family_index_ = present_index.value();
+            std::cout << "[INFO] Found suitable physical device: " << device.getProperties().deviceName << std::endl;
+            return;
+        }
+    }
+    throw std::runtime_error("No suitable physical device found");
 }
