@@ -57,6 +57,8 @@ private:
     std::unique_ptr<vk::raii::DescriptorSetLayout> descriptor_set_layout_;
     std::unique_ptr<vk::raii::PipelineLayout> pipeline_layout_;
     std::unique_ptr<vk::raii::Pipeline> compute_pipeline_;
+    std::unique_ptr<vk::raii::DescriptorPool> descriptor_pool_;
+    std::unique_ptr<vk::raii::DescriptorSet> descriptor_set_;
 
     void CreateVkInstance();
     std::vector<const char*> GetEnabledExtensions();
@@ -86,6 +88,8 @@ private:
     void CreateDescriptorSetLayout();
     void CreatePipelineLayout();
     void CreateComputePipeline();
+    void CreateDescriptorPool();
+    void CreateDescriptorSet();
 };
 
 }

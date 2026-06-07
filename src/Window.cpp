@@ -53,6 +53,8 @@ void Window::Show() {
         CreateShaderModule();
         CreatePipelineLayout();
         CreateComputePipeline();
+        CreateDescriptorPool();
+        CreateDescriptorSet();
         // 主循环
         while (!glfwWindowShouldClose(window_)) {
             if (frame_buffer_resized_) {
@@ -727,4 +729,38 @@ void Window::CreateComputePipeline() {
         .setLayout(**pipeline_layout_);
     compute_pipeline_ = std::make_unique<vk::raii::Pipeline>(
         device_->createComputePipeline(nullptr, cp_ci));
+}
+
+void Window::CreateDescriptorPool() {
+    vk::DescriptorPoolSize ps{};
+    ps.setType(vk::DescriptorType::eStorageBuffer)
+        .setDescriptorCount(1);
+    vk::DescriptorPoolCreateInfo ci{};
+    ci.setPoolSizeCount(1)
+        .setPPoolSizes(&ps)
+        .setMaxSets(1)
+        .setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
+    descriptor_pool_ = std::make_unique<vk::raii::DescriptorPool>(
+        device_->createDescriptorPool(ci));
+}
+
+void Window::CreateDescriptorSet() {
+    vk::DescriptorSetAllocateInfo ai{};
+    ai.setDescriptorSetCount(1)
+        .setDescriptorPool(**descriptor_pool_)
+        .setPSetLayouts(&**descriptor_set_layout_);
+    auto ds = device_->allocateDescriptorSets(ai);
+    descriptor_set_ = std::make_unique<vk::raii::DescriptorSet>(std::move(ds[0]));
+
+    vk::DescriptorBufferInfo bi{};
+    bi.setBuffer(**storage_buffer_)
+        .setOffset(0)
+        .setRange(kStorageBufferSize);
+    vk::WriteDescriptorSet wds{};
+    wds.setDstSet(**descriptor_set_)
+        .setDstBinding(0)
+        .setDescriptorType(vk::DescriptorType::eStorageBuffer)
+        .setDescriptorCount(1)
+        .setPBufferInfo(&bi);
+    device_->updateDescriptorSets(wds, nullptr);
 }
