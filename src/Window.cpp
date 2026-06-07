@@ -4,6 +4,7 @@
 
 #include "Window.h"
 
+#include <fstream>
 #include <spdlog/spdlog.h>
 #include <memory>
 #include <set>
@@ -41,6 +42,7 @@ void Window::Show() {
         CreateLogicalDevice();
         CreateSwapChain();
         CreateImageViews();
+        CreateShaderModule();
         CreateRenderPass();
         CreateFrameBuffers();
         CreateCommandPoolAndBuffers();
@@ -566,4 +568,31 @@ void Window::RecreateSwapChain() {
     CreateFrameBuffers();
     CreateImageBasedSyncObjects();
     frame_buffer_resized_ = false;
+}
+
+void Window::CreateShaderModule() {
+    constexpr auto file = "shaders/compute.comp.spv";
+    std::ifstream is(file, std::ios::binary);
+    if (!is.is_open()) {
+        throw std::runtime_error("failed to open");
+    }
+    // 获取文件大小并检查是否为 4 的倍数
+    is.seekg(0, std::ios::end);
+    std::streamsize fs = is.tellg();
+    if (fs % sizeof(uint32_t) != 0) {
+        throw std::runtime_error("SPIR-V file size is not a multiple of 4 bytes");
+    }
+
+    std::vector<uint32_t> buffer(fs / sizeof(uint32_t));
+    is.seekg(0, std::ios::beg);
+    is.read(reinterpret_cast<char*>(buffer.data()), fs);
+
+    if (is.gcount() != fs) {
+        throw std::runtime_error("failed to read");
+    }
+
+    vk::ShaderModuleCreateInfo ci{};
+    ci.setCodeSize(buffer.size() * sizeof(uint32_t))
+        .setPCode(buffer.data());
+    compute_shader_module_ = std::make_unique<vk::raii::ShaderModule>(device_->createShaderModule(ci));
 }

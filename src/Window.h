@@ -49,12 +49,17 @@ private:
     std::vector<vk::ImageLayout> image_layouts_;
     bool frame_buffer_resized_ = false;
 
+    std::unique_ptr<vk::raii::ShaderModule> compute_shader_module_;
+    std::unique_ptr<vk::raii::Buffer> storage_buffer_;
+    std::unique_ptr<vk::raii::DeviceMemory> storage_memory_;
+    static constexpr uint32_t kStorageElementCount = 1024;
+    static constexpr vk::DeviceSize kStorageBufferSize = kStorageElementCount * sizeof(float);
+
     void CreateVkInstance();
     std::vector<const char*> GetEnabledExtensions();
     std::vector<const char*> GetEnabledValidationLayers();
     vk::ApplicationInfo GetApplicationInfo() const;
     vk::DebugUtilsMessengerCreateInfoEXT GetDebugMessengerCreateInfo() const;
-
     void CreateWindowSurface();
     void CheckPhysicalDevice();
     void CreateLogicalDevice();
@@ -67,6 +72,8 @@ private:
     void CreateImageBasedSyncObjects();
     void RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t img_idx);
     void RecreateSwapChain();
+
+    void CreateShaderModule();
 };
 
 }
