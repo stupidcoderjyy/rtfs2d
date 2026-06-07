@@ -46,6 +46,7 @@ void Window::Show() {
         CreateRenderPass();
         CreateFrameBuffers();
         CreateCommandPoolAndBuffers();
+        CreateStorageBuffer();
         CreateFrameBasedSyncObjects();
         CreateImageBasedSyncObjects();
         // 主循环
@@ -626,4 +627,67 @@ void Window::CreateStorageBuffer() {
         .setMemoryTypeIndex(mti);
     storage_memory_ = std::make_unique<vk::raii::DeviceMemory>(device_->allocateMemory(ai));
     storage_buffer_->bindMemory(**storage_memory_, 0);
+
+    std::unique_ptr<vk::raii::Buffer> staging_buffer;
+    std::unique_ptr<vk::raii::DeviceMemory> staging_memory;
+    CreateStagingBuffer(staging_buffer, staging_memory);
+    RecordComputeCommand(staging_buffer);
+}
+
+void Window::CreateStagingBuffer(
+        std::unique_ptr<vk::raii::Buffer>& staging_buffer,
+        std::unique_ptr<vk::raii::DeviceMemory>& staging_memory) const {
+    vk::BufferCreateInfo ci{};
+    ci.setSize(kStorageBufferSize)
+        .setUsage(vk::BufferUsageFlagBits::eTransferSrc)
+        .setSharingMode(vk::SharingMode::eExclusive);
+    staging_buffer = std::make_unique<vk::raii::Buffer>(device_->createBuffer(ci));
+
+    vk::DeviceBufferMemoryRequirements bmr{};
+    bmr.setPCreateInfo(&ci);
+    auto mr = device_->getBufferMemoryRequirements(bmr).memoryRequirements;
+    auto mti = FindMemoryType(mr.memoryTypeBits,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    vk::MemoryAllocateInfo ai;
+    ai.setAllocationSize(mr.size)
+        .setMemoryTypeIndex(mti);
+    staging_memory = std::make_unique<vk::raii::DeviceMemory>(device_->allocateMemory(ai));
+
+    staging_buffer->bindMemory(**staging_memory, 0);
+    void* mp = staging_memory->mapMemory(0, kStorageBufferSize);
+
+    float arr[1024];
+    for (int i = 0; i < 1024; ++i) {
+        arr[i] = static_cast<float>(i);
+    }
+    std::memcpy(mp, arr, kStorageBufferSize);
+    staging_memory->unmapMemory();
+}
+
+void Window::RecordComputeCommand(std::unique_ptr<vk::raii::Buffer> &staging_buffer) const {
+    // 分配临时命令缓冲区（已在题目中给出）
+    vk::CommandBufferAllocateInfo ai{};
+    ai.setCommandPool(**command_pool_)
+        .setCommandBufferCount(1)
+        .setLevel(vk::CommandBufferLevel::ePrimary);
+    std::vector<vk::raii::CommandBuffer> cbs = device_->allocateCommandBuffers(ai);
+    auto& cb = cbs.front();
+
+    // 开始命令缓冲区录制（OneTimeSubmit 标记优化）
+    cb.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+
+    // 构造拷贝区域：全缓冲区拷贝，偏移为 0
+    vk::BufferCopy copy_region;
+    copy_region.setSrcOffset(0)
+        .setDstOffset(0)
+        .setSize(kStorageBufferSize);
+
+    cb.copyBuffer(**staging_buffer, **storage_buffer_, copy_region);
+    cb.end();
+
+    vk::SubmitInfo si;
+    si.setCommandBuffers(*cb);
+
+    graphics_queue_->submit(si);
+    graphics_queue_->waitIdle();
 }

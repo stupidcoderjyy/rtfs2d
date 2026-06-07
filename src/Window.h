@@ -76,6 +76,10 @@ private:
     void CreateShaderModule();
     uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
     void CreateStorageBuffer();
+    void CreateStagingBuffer(
+        std::unique_ptr<vk::raii::Buffer>& staging_buffer,
+        std::unique_ptr<vk::raii::DeviceMemory>& staging_memory) const;
+    void RecordComputeCommand(std::unique_ptr<vk::raii::Buffer> &staging_buffer) const;
 };
 
 }
