@@ -61,6 +61,7 @@ private:
     std::unique_ptr<vk::raii::DescriptorSet> descriptor_set_;
     std::unique_ptr<vk::raii::CommandPool> compute_command_pool_;
     std::unique_ptr<vk::raii::CommandBuffer> compute_command_buffer_;
+    bool compute_verified_ = false;
 
     void CreateVkInstance();
     std::vector<const char*> GetEnabledExtensions();
@@ -94,6 +95,7 @@ private:
     void CreateDescriptorSet();
     void CreateComputeCommandPool();
     void RecordComputeCommands();
+    void ReadBackAndVerify() const;
 };
 
 }

@@ -49,7 +49,7 @@ void Window::Show() {
         CreateDescriptorSetLayout();
         CreateFrameBasedSyncObjects();
         CreateImageBasedSyncObjects();
-        // 计算着色器
+        // 加载着色器程序
         CreateShaderModule();
         CreatePipelineLayout();
         CreateComputePipeline();
@@ -80,11 +80,15 @@ void Window::Show() {
             }
             device_->resetFences(**fence);
 
-            // 计算
+            // 完成并验证着色器计算
             vk::SubmitInfo c_si{};
             c_si.setCommandBuffers(**compute_command_buffer_);
             graphics_queue_->submit(c_si);
             graphics_queue_->waitIdle();
+            if (!compute_verified_) {
+                ReadBackAndVerify();
+                compute_verified_ = true;
+            }
 
             // 尝试从交换链获取一张处于空闲状态图像的所有权
             // 一张图片可能有六个状态：空闲状态 → 被CPU占用 → 处于渲染队列 → 正在渲染 → 处于呈现队列 → 正在呈现
@@ -806,4 +810,52 @@ void Window::RecordComputeCommands() {
         vk::PipelineStageFlagBits::eHost,
         {}, nullptr, barrier, nullptr);
     cb.end();
+}
+
+void Window::ReadBackAndVerify() const {
+    vk::BufferCreateInfo ci{};
+    ci.setSize(kStorageBufferSize)
+        .setUsage(vk::BufferUsageFlagBits::eTransferDst)
+        .setSharingMode(vk::SharingMode::eExclusive);
+    auto staging_buf = device_->createBuffer(ci);
+
+    auto mr = staging_buf.getMemoryRequirements();
+    auto mti = FindMemoryType(mr.memoryTypeBits,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    vk::MemoryAllocateInfo m_ai{};
+    m_ai.setAllocationSize(mr.size)
+        .setMemoryTypeIndex(mti);
+    auto staging_mem = device_->allocateMemory(m_ai);
+    staging_buf.bindMemory(*staging_mem, 0);
+
+    vk::CommandBufferAllocateInfo ai{};
+    ai.setCommandPool(*compute_command_pool_)
+        .setCommandBufferCount(1)
+        .setLevel(vk::CommandBufferLevel::ePrimary);
+    auto cbs = device_->allocateCommandBuffers(ai);
+    auto& cb = cbs.front();
+    cb.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+    vk::BufferCopy copy{};
+    copy.setSrcOffset(0)
+        .setSize(kStorageBufferSize);
+    cb.copyBuffer(**storage_buffer_, *staging_buf, copy);
+    cb.end();
+
+    vk::SubmitInfo si{};
+    si.setCommandBuffers(*cb);
+    graphics_queue_->submit(si);
+    graphics_queue_->waitIdle();
+
+    auto* p_res = static_cast<float*>(staging_mem.mapMemory(0, kStorageBufferSize));
+    bool pass = true;
+    for (int i = 0; i < 1024; ++i) {
+        if (float delta = std::abs(p_res[i] - static_cast<float>(i) * 2.0f); delta > 1e-5f) {
+            spdlog::warn("Value mismatch at index {}, delta: {}", i, delta);
+            pass = false;
+        }
+    }
+    if (pass) {
+        spdlog::info("All values match within tolerance");
+    }
+    staging_mem.unmapMemory();
 }
