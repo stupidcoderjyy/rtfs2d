@@ -15,12 +15,13 @@ find_package(spdlog REQUIRED)
 set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 
-add_subdirectory(thirdparty/googletest)
-add_subdirectory(src)
-add_subdirectory(test)
-
 add_executable(${PROJECT_NAME} main.cpp)
 target_link_libraries(${PROJECT_NAME} PRIVATE
         rtfs2d::core
         spdlog::spdlog
 )
+
+add_subdirectory(thirdparty/googletest)
+add_subdirectory(src)
+add_subdirectory(test)
+add_subdirectory(shaders)

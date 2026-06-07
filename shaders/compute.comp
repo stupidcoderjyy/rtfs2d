@@ -1,0 +1,25 @@
+#version 450
+
+// GPU 执行代码的基本单位是 线程（Thread）。
+// 计算着色器允许你启动成千上万个线程，每个线程独立执行同一个 main() 函数，但处理不同的数据
+
+// 工作组大小：256 个调用，沿 X 方向
+// 定义了每个 工作组（Workgroup，也称线程块）包含 256 个线程（沿 X 方向排列）
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+// Storage buffer，绑定到 set = 0, binding = 0，使用 std430 布局
+// Storage Buffer 是 GPU 中的一块内存区域，可以被着色器读取和写入，并且 CPU 端也能访问
+// set = 0, binding = 0 是 Vulkan 描述符集布局中的绑定点，CPU 端会将具体的 buffer 对象绑定到这个位置
+// std430 是内存布局规则，保证数组元素紧密排列（每个 float 占 4 字节）
+// values[] 是一个无界数组，实际大小由绑定的 buffer 大小决定
+layout(set = 0, binding = 0, std430) buffer MyBuffer {
+    float values[];
+};
+
+void main() {
+    // 获取全局调用索引（等同于 values 数组的索引）
+    uint idx = gl_GlobalInvocationID.x;
+
+    // 将对应元素乘以 2.0
+    values[idx] = values[idx] * 2.0;
+}
