@@ -55,6 +55,8 @@ void Window::Show() {
         CreateComputePipeline();
         CreateDescriptorPool();
         CreateDescriptorSet();
+        CreateComputeCommandPool();
+        RecordComputeCommands();
         // 主循环
         while (!glfwWindowShouldClose(window_)) {
             if (frame_buffer_resized_) {
@@ -77,6 +79,12 @@ void Window::Show() {
                 throw std::runtime_error("waitForFences failed: " + std::to_string(static_cast<int>(result)));
             }
             device_->resetFences(**fence);
+
+            // 计算
+            vk::SubmitInfo c_si{};
+            c_si.setCommandBuffers(**compute_command_buffer_);
+            graphics_queue_->submit(c_si);
+            graphics_queue_->waitIdle();
 
             // 尝试从交换链获取一张处于空闲状态图像的所有权
             // 一张图片可能有六个状态：空闲状态 → 被CPU占用 → 处于渲染队列 → 正在渲染 → 处于呈现队列 → 正在呈现
@@ -637,7 +645,7 @@ void Window::CreateStorageBuffer() {
     std::unique_ptr<vk::raii::Buffer> staging_buffer;
     std::unique_ptr<vk::raii::DeviceMemory> staging_memory;
     CreateStagingBuffer(staging_buffer, staging_memory);
-    RecordComputeCommand(staging_buffer);
+    RecordStorageCommand(staging_buffer);
 }
 
 void Window::CreateStagingBuffer(
@@ -670,7 +678,7 @@ void Window::CreateStagingBuffer(
     staging_memory->unmapMemory();
 }
 
-void Window::RecordComputeCommand(std::unique_ptr<vk::raii::Buffer> &staging_buffer) const {
+void Window::RecordStorageCommand(std::unique_ptr<vk::raii::Buffer> &staging_buffer) const {
     // 分配临时命令缓冲区（已在题目中给出）
     vk::CommandBufferAllocateInfo ai{};
     ai.setCommandPool(**command_pool_)
@@ -763,4 +771,39 @@ void Window::CreateDescriptorSet() {
         .setDescriptorCount(1)
         .setPBufferInfo(&bi);
     device_->updateDescriptorSets(wds, nullptr);
+}
+
+void Window::CreateComputeCommandPool() {
+    vk::CommandPoolCreateInfo cp_ci{};
+    cp_ci.setQueueFamilyIndex(graphics_queue_family_index_)
+        .setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer);
+    compute_command_pool_ = std::make_unique<vk::raii::CommandPool>(
+        device_->createCommandPool(cp_ci));
+}
+
+void Window::RecordComputeCommands() {
+    vk::CommandBufferAllocateInfo ai{};
+    ai.setCommandPool(*compute_command_pool_)
+        .setCommandBufferCount(1)
+        .setLevel(vk::CommandBufferLevel::ePrimary);
+    auto cbs = device_->allocateCommandBuffers(ai);
+    compute_command_buffer_ = std::make_unique<vk::raii::CommandBuffer>(std::move(cbs[0]));
+    auto& cb = *compute_command_buffer_;
+    cb.begin({vk::CommandBufferUsageFlagBits::eSimultaneousUse});
+    cb.bindPipeline(vk::PipelineBindPoint::eCompute, **compute_pipeline_);
+    cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, **pipeline_layout_, 0, **descriptor_set_, nullptr);
+    int group_count = (kStorageElementCount + 255) / 256;
+    cb.dispatch(group_count, 1, 1);
+    vk::BufferMemoryBarrier barrier{};
+    barrier.setSrcAccessMask(vk::AccessFlagBits::eShaderWrite)
+        .setDstAccessMask(vk::AccessFlagBits::eHostRead)
+        .setBuffer(**storage_buffer_)
+        .setSize(kStorageBufferSize)
+        .setOffset(0)
+        .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+        .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
+    cb.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
+        vk::PipelineStageFlagBits::eHost,
+        {}, nullptr, barrier, nullptr);
+    cb.end();
 }

@@ -59,6 +59,8 @@ private:
     std::unique_ptr<vk::raii::Pipeline> compute_pipeline_;
     std::unique_ptr<vk::raii::DescriptorPool> descriptor_pool_;
     std::unique_ptr<vk::raii::DescriptorSet> descriptor_set_;
+    std::unique_ptr<vk::raii::CommandPool> compute_command_pool_;
+    std::unique_ptr<vk::raii::CommandBuffer> compute_command_buffer_;
 
     void CreateVkInstance();
     std::vector<const char*> GetEnabledExtensions();
@@ -84,12 +86,14 @@ private:
     void CreateStagingBuffer(
         std::unique_ptr<vk::raii::Buffer>& staging_buffer,
         std::unique_ptr<vk::raii::DeviceMemory>& staging_memory) const;
-    void RecordComputeCommand(std::unique_ptr<vk::raii::Buffer> &staging_buffer) const;
+    void RecordStorageCommand(std::unique_ptr<vk::raii::Buffer> &staging_buffer) const;
     void CreateDescriptorSetLayout();
     void CreatePipelineLayout();
     void CreateComputePipeline();
     void CreateDescriptorPool();
     void CreateDescriptorSet();
+    void CreateComputeCommandPool();
+    void RecordComputeCommands();
 };
 
 }
