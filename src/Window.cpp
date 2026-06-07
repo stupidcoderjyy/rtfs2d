@@ -596,3 +596,34 @@ void Window::CreateShaderModule() {
         .setPCode(buffer.data());
     compute_shader_module_ = std::make_unique<vk::raii::ShaderModule>(device_->createShaderModule(ci));
 }
+
+uint32_t Window::FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const {
+    auto mp = physical_device_.getMemoryProperties();
+    for (int i = 0; i < mp.memoryTypes.size(); ++i) {
+        if (typeFilter & 1 << i && properties == mp.memoryTypes[i].propertyFlags) {
+            return i;
+        }
+    }
+    throw std::runtime_error("failed to find suitable memory type");
+}
+
+void Window::CreateStorageBuffer() {
+    vk::BufferCreateInfo ci{};
+    ci.setSize(kStorageBufferSize)
+        .setUsage(vk::BufferUsageFlagBits::eStorageBuffer |
+            vk::BufferUsageFlagBits::eTransferSrc |
+            vk::BufferUsageFlagBits::eTransferDst)
+        .setSharingMode(vk::SharingMode::eExclusive);
+    storage_buffer_ = std::make_unique<vk::raii::Buffer>(device_->createBuffer(ci));
+
+    vk::DeviceBufferMemoryRequirements bmr{};
+    bmr.setPCreateInfo(&ci);
+    auto mr = device_->getBufferMemoryRequirements(bmr).memoryRequirements;
+    auto mti = FindMemoryType(mr.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+    vk::MemoryAllocateInfo ai;
+    ai.setAllocationSize(mr.size)
+        .setMemoryTypeIndex(mti);
+    storage_memory_ = std::make_unique<vk::raii::DeviceMemory>(device_->allocateMemory(ai));
+    storage_buffer_->bindMemory(**storage_memory_, 0);
+}

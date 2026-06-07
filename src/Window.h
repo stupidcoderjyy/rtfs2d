@@ -74,6 +74,8 @@ private:
     void RecreateSwapChain();
 
     void CreateShaderModule();
+    uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
+    void CreateStorageBuffer();
 };
 
 }
