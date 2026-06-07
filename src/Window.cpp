@@ -47,6 +47,8 @@ void Window::Show() {
         CreateFrameBuffers();
         CreateCommandPoolAndBuffers();
         CreateStorageBuffer();
+        CreateDescriptorSetLayout();
+        CreatePipelineLayout();
         CreateFrameBasedSyncObjects();
         CreateImageBasedSyncObjects();
         // 主循环
@@ -690,4 +692,25 @@ void Window::RecordComputeCommand(std::unique_ptr<vk::raii::Buffer> &staging_buf
 
     graphics_queue_->submit(si);
     graphics_queue_->waitIdle();
+}
+
+void Window::CreateDescriptorSetLayout() {
+    vk::DescriptorSetLayoutBinding lb{};
+    lb.setBinding(0)
+        .setDescriptorType(vk::DescriptorType::eStorageBuffer)
+        .setDescriptorCount(1)
+        .setStageFlags(vk::ShaderStageFlagBits::eCompute);
+    vk::DescriptorSetLayoutCreateInfo ci{};
+    ci.setBindingCount(1)
+        .setPBindings(&lb);
+    descriptor_set_layout_ = std::make_unique<vk::raii::DescriptorSetLayout>(
+        device_->createDescriptorSetLayout(ci));
+}
+
+void Window::CreatePipelineLayout() {
+    vk::PipelineLayoutCreateInfo ci{};
+    ci.setSetLayoutCount(1)
+        .setPSetLayouts(&**descriptor_set_layout_);
+    pipeline_layout_ = std::make_unique<vk::raii::PipelineLayout>(
+        device_->createPipelineLayout(ci));
 }
