@@ -56,6 +56,7 @@ private:
     static constexpr vk::DeviceSize kStorageBufferSize = kStorageElementCount * sizeof(float);
     std::unique_ptr<vk::raii::DescriptorSetLayout> descriptor_set_layout_;
     std::unique_ptr<vk::raii::PipelineLayout> pipeline_layout_;
+    std::unique_ptr<vk::raii::Pipeline> compute_pipeline_;
 
     void CreateVkInstance();
     std::vector<const char*> GetEnabledExtensions();
@@ -84,6 +85,7 @@ private:
     void RecordComputeCommand(std::unique_ptr<vk::raii::Buffer> &staging_buffer) const;
     void CreateDescriptorSetLayout();
     void CreatePipelineLayout();
+    void CreateComputePipeline();
 };
 
 }

@@ -42,15 +42,17 @@ void Window::Show() {
         CreateLogicalDevice();
         CreateSwapChain();
         CreateImageViews();
-        CreateShaderModule();
         CreateRenderPass();
         CreateFrameBuffers();
         CreateCommandPoolAndBuffers();
         CreateStorageBuffer();
         CreateDescriptorSetLayout();
-        CreatePipelineLayout();
         CreateFrameBasedSyncObjects();
         CreateImageBasedSyncObjects();
+        // 计算着色器
+        CreateShaderModule();
+        CreatePipelineLayout();
+        CreateComputePipeline();
         // 主循环
         while (!glfwWindowShouldClose(window_)) {
             if (frame_buffer_resized_) {
@@ -713,4 +715,16 @@ void Window::CreatePipelineLayout() {
         .setPSetLayouts(&**descriptor_set_layout_);
     pipeline_layout_ = std::make_unique<vk::raii::PipelineLayout>(
         device_->createPipelineLayout(ci));
+}
+
+void Window::CreateComputePipeline() {
+    vk::PipelineShaderStageCreateInfo pss_ci{};
+    pss_ci.setStage(vk::ShaderStageFlagBits::eCompute)
+        .setModule(**compute_shader_module_)
+        .setPName("main");
+    vk::ComputePipelineCreateInfo cp_ci{};
+    cp_ci.setStage(pss_ci)
+        .setLayout(**pipeline_layout_);
+    compute_pipeline_ = std::make_unique<vk::raii::Pipeline>(
+        device_->createComputePipeline(nullptr, cp_ci));
 }
