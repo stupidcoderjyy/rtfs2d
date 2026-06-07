@@ -63,6 +63,12 @@ private:
     std::unique_ptr<vk::raii::CommandBuffer> compute_command_buffer_;
     bool compute_verified_ = false;
 
+    std::unique_ptr<vk::raii::ShaderModule> vert_shader_module_;
+    std::unique_ptr<vk::raii::ShaderModule> frag_shader_module_;
+    std::unique_ptr<vk::raii::PipelineLayout> graphics_pipeline_layout_;
+    std::unique_ptr<vk::raii::Pipeline> graphics_pipeline_;
+
+
     void CreateVkInstance();
     std::vector<const char*> GetEnabledExtensions();
     std::vector<const char*> GetEnabledValidationLayers();
@@ -81,7 +87,7 @@ private:
     void RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t img_idx);
     void RecreateSwapChain();
 
-    void CreateShaderModule();
+    std::unique_ptr<vk::raii::ShaderModule> LoadShader(const std::string& path) const;
     uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
     void CreateStorageBuffer();
     void CreateStagingBuffer(
@@ -96,6 +102,8 @@ private:
     void CreateComputeCommandPool();
     void RecordComputeCommands();
     void ReadBackAndVerify() const;
+
+    void CreateGraphicsPipeline();
 };
 
 }

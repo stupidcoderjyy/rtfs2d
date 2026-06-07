@@ -2,6 +2,8 @@ set(TARGET rtfs2d_shaders)
 
 set(SHADER_SOURCES
         compute.comp
+        fullscreen.frag
+        fullscreen.vert
 )
 
 find_program(GLSLC glslc HINTS "${LIB_PREFIX_PATH}/bin")

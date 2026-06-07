@@ -49,14 +49,19 @@ void Window::Show() {
         CreateDescriptorSetLayout();
         CreateFrameBasedSyncObjects();
         CreateImageBasedSyncObjects();
-        // 加载着色器程序
-        CreateShaderModule();
+
+        // 加载计算2倍浮点数的着色器程序
+        compute_shader_module_ = LoadShader("shaders/compute.comp.spv");
         CreatePipelineLayout();
         CreateComputePipeline();
         CreateDescriptorPool();
         CreateDescriptorSet();
         CreateComputeCommandPool();
         RecordComputeCommands();
+
+        // 创建波浪界面的图形管线
+        CreateGraphicsPipeline();
+
         // 主循环
         while (!glfwWindowShouldClose(window_)) {
             if (frame_buffer_resized_) {
@@ -531,47 +536,61 @@ void Window::CreateImageBasedSyncObjects() {
 
 void Window::RecordCommands(const vk::raii::CommandBuffer &cb, uint32_t img_idx) {
     cb.begin({});
+
+    // 图像布局转换：从旧布局到颜色附件最优布局
     vk::ImageMemoryBarrier barrier{};
     vk::ImageSubresourceRange sr{};
     sr.setAspectMask(vk::ImageAspectFlagBits::eColor)
-        .setBaseMipLevel(0)
-        .setLevelCount(1)
-        .setBaseArrayLayer(0)
-        .setLayerCount(1);
+      .setBaseMipLevel(0)
+      .setLevelCount(1)
+      .setBaseArrayLayer(0)
+      .setLayerCount(1);
     barrier.setImage(swapchain_images_[img_idx])
-        .setOldLayout(image_layouts_[img_idx])
-        .setNewLayout(vk::ImageLayout::eColorAttachmentOptimal)
-        .setSrcAccessMask(vk::AccessFlagBits::eNone)
-        .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite)
-        .setSubresourceRange(sr)
-        .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-        .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
+           .setOldLayout(image_layouts_[img_idx])
+           .setNewLayout(vk::ImageLayout::eColorAttachmentOptimal)
+           .setSrcAccessMask(vk::AccessFlagBits::eNone)
+           .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite)
+           .setSubresourceRange(sr)
+           .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+           .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
     cb.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
-        vk::PipelineStageFlagBits::eColorAttachmentOutput,
-        {}, nullptr, nullptr, barrier);
+                       vk::PipelineStageFlagBits::eColorAttachmentOutput,
+                       {}, nullptr, nullptr, barrier);
 
-    // 帧计数器，每录制一次自增
-    static uint64_t frame_counter = 0;
-    ++frame_counter;
-
-    // 获取程序启动以来的秒数（高精度）
-    double time = glfwGetTime();
-    // 控制颜色循环速度：2*pi 弧度对应一个完整周期，这里用 1.5 弧度每秒，约 4.2 秒一个循环
-    auto hue = static_cast<float>(time * 1.5);  // 1.5 弧度/秒，周期 ≈ 4.18879 秒
-    // 从 hue 计算 RGB（简单正弦波，三通道相位差 120 度）
-    float r = (std::sin(hue) + 1.0f) / 2.0f;
-    float g = (std::sin(hue + 2.09439f) + 1.0f) / 2.0f;   // +120°
-    float b = (std::sin(hue + 4.18879f) + 1.0f) / 2.0f;   // +240°
-    vk::ClearValue clear_value{{r, g, b, 1.0f}};
-
+    // 开始渲染通道，清除颜色为黑色
+    vk::ClearValue clear_value{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}};
     vk::RenderPassBeginInfo bi{};
-    bi.setRenderPass(*render_pass_)                               // 渲染通道
-        .setFramebuffer(*framebuffers_[img_idx])                  // 对应的帧缓冲
-        .setRenderArea({{0, 0, swapchain_extent_.width, swapchain_extent_.height}})  // 覆盖整个交换链
-        .setClearValueCount(1)                                    // 清除值数量
-        .setPClearValues(&clear_value);                           // 清除值
-    cb.beginRenderPass(bi, vk::SubpassContents::eInline);         // 开始渲染通道
-    cb.endRenderPass();                                           // 结束渲染通道
+    bi.setRenderPass(*render_pass_)
+      .setFramebuffer(*framebuffers_[img_idx])
+      .setRenderArea({{0, 0, swapchain_extent_.width, swapchain_extent_.height}})
+      .setClearValueCount(1)
+      .setPClearValues(&clear_value);
+    cb.beginRenderPass(bi, vk::SubpassContents::eInline);
+
+    // 设置动态视口和剪刀（必须与交换链尺寸一致）
+    vk::Viewport viewport(0.0f, 0.0f,
+                          static_cast<float>(swapchain_extent_.width),
+                          static_cast<float>(swapchain_extent_.height),
+                          0.0f, 1.0f);
+    vk::Rect2D scissor({0, 0}, swapchain_extent_);
+    cb.setViewport(0, viewport);
+    cb.setScissor(0, scissor);
+
+    // 4. 绑定图形管线
+    cb.bindPipeline(vk::PipelineBindPoint::eGraphics, **graphics_pipeline_);
+
+    // 5. 推送时间常量（片段着色器需要的时间，单位：秒）
+    float t = static_cast<float>(glfwGetTime());
+    cb.pushConstants<float>(**graphics_pipeline_layout_,
+                            vk::ShaderStageFlagBits::eFragment,
+                            0, t);
+
+    // 6. 绘制全屏三角形（3个顶点）
+    cb.draw(3, 1, 0, 0);
+
+    cb.endRenderPass();
+
+    // 7. 将图像布局转换为呈现源布局
     cb.end();
     image_layouts_[img_idx] = vk::ImageLayout::ePresentSrcKHR;
 }
@@ -589,9 +608,8 @@ void Window::RecreateSwapChain() {
     frame_buffer_resized_ = false;
 }
 
-void Window::CreateShaderModule() {
-    constexpr auto file = "shaders/compute.comp.spv";
-    std::ifstream is(file, std::ios::binary);
+std::unique_ptr<vk::raii::ShaderModule> Window::LoadShader(const std::string &path) const {
+    std::ifstream is(path, std::ios::binary);
     if (!is.is_open()) {
         throw std::runtime_error("failed to open");
     }
@@ -613,7 +631,7 @@ void Window::CreateShaderModule() {
     vk::ShaderModuleCreateInfo ci{};
     ci.setCodeSize(buffer.size() * sizeof(uint32_t))
         .setPCode(buffer.data());
-    compute_shader_module_ = std::make_unique<vk::raii::ShaderModule>(device_->createShaderModule(ci));
+    return std::make_unique<vk::raii::ShaderModule>(device_->createShaderModule(ci));
 }
 
 uint32_t Window::FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const {
@@ -858,4 +876,101 @@ void Window::ReadBackAndVerify() const {
         spdlog::info("All values match within tolerance");
     }
     staging_mem.unmapMemory();
+}
+
+void Window::CreateGraphicsPipeline() {
+    // 加载顶点和片段着色器
+    vert_shader_module_ = LoadShader("shaders/fullscreen.vert.spv");
+    frag_shader_module_ = LoadShader("shaders/fullscreen.frag.spv");
+
+    // 着色器阶段
+    vk::PipelineShaderStageCreateInfo vertexStage{};
+    vertexStage.setStage(vk::ShaderStageFlagBits::eVertex)
+               .setModule(**vert_shader_module_)
+               .setPName("main");
+
+    vk::PipelineShaderStageCreateInfo fragmentStage{};
+    fragmentStage.setStage(vk::ShaderStageFlagBits::eFragment)
+                 .setModule(**frag_shader_module_)
+                 .setPName("main");
+
+    std::array stages = {vertexStage, fragmentStage};
+
+    // 顶点输入状态（无顶点属性）
+    vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
+    vertexInputInfo.setVertexBindingDescriptionCount(0)
+                   .setVertexAttributeDescriptionCount(0);
+
+    // 输入装配状态
+    vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.setTopology(vk::PrimitiveTopology::eTriangleList)
+                 .setPrimitiveRestartEnable(VK_FALSE);
+
+    // 视口和剪刀（动态状态，管线创建时无需填充）
+    vk::PipelineViewportStateCreateInfo viewportState{};
+    viewportState.setViewportCount(1)
+                 .setScissorCount(1);
+
+    // 光栅化状态
+    vk::PipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.setPolygonMode(vk::PolygonMode::eFill)
+              .setCullMode(vk::CullModeFlagBits::eNone)
+              .setFrontFace(vk::FrontFace::eClockwise)
+              .setLineWidth(1.0f);
+
+    // 多重采样状态
+    vk::PipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.setRasterizationSamples(vk::SampleCountFlagBits::e1);
+
+    // 颜色混合附件
+    vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
+    colorBlendAttachment.setBlendEnable(VK_FALSE)
+        .setColorWriteMask(vk::ColorComponentFlagBits::eR |
+            vk::ColorComponentFlagBits::eG |
+            vk::ColorComponentFlagBits::eB |
+            vk::ColorComponentFlagBits::eA);
+
+    // 颜色混合状态
+    vk::PipelineColorBlendStateCreateInfo colorBlending{};
+    colorBlending.setAttachmentCount(1)
+                 .setPAttachments(&colorBlendAttachment);
+
+    // 动态状态
+    std::array dynamicStates = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+    vk::PipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.setDynamicStates(dynamicStates);
+
+    // Push constant 范围
+    vk::PushConstantRange pushConstantRange{};
+    pushConstantRange.setStageFlags(vk::ShaderStageFlagBits::eFragment)
+                     .setOffset(0)
+                     .setSize(sizeof(float));
+
+    // 管线布局
+    vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
+    pipelineLayoutInfo.setPushConstantRangeCount(1)
+                      .setPPushConstantRanges(&pushConstantRange);
+    graphics_pipeline_layout_ = std::make_unique<vk::raii::PipelineLayout>(
+        device_->createPipelineLayout(pipelineLayoutInfo)
+    );
+
+    // 图形管线创建信息
+    vk::GraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.setStageCount(stages.size())
+                .setPStages(stages.data())
+                .setPVertexInputState(&vertexInputInfo)
+                .setPInputAssemblyState(&inputAssembly)
+                .setPViewportState(&viewportState)
+                .setPRasterizationState(&rasterizer)
+                .setPMultisampleState(&multisampling)
+                .setPColorBlendState(&colorBlending)
+                .setPDynamicState(&dynamicState)
+                .setLayout(**graphics_pipeline_layout_)
+                .setRenderPass(**render_pass_)
+                .setSubpass(0);
+
+    // 创建图形管线
+    graphics_pipeline_ = std::make_unique<vk::raii::Pipeline>(
+        device_->createGraphicsPipeline(nullptr, pipelineInfo)
+    );
 }
