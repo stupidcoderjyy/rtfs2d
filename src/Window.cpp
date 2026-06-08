@@ -580,7 +580,7 @@ void Window::RecordCommands(const vk::raii::CommandBuffer &cb, uint32_t img_idx)
     cb.bindPipeline(vk::PipelineBindPoint::eGraphics, **graphics_pipeline_);
 
     // 5. 推送时间常量（片段着色器需要的时间，单位：秒）
-    float t = static_cast<float>(glfwGetTime());
+    auto t = static_cast<float>(glfwGetTime());
     cb.pushConstants<float>(**graphics_pipeline_layout_,
                             vk::ShaderStageFlagBits::eFragment,
                             0, t);
