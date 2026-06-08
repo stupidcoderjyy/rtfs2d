@@ -666,11 +666,18 @@ void Window::CreateStorageBuffer() {
 
     std::unique_ptr<vk::raii::Buffer> staging_buffer;
     std::unique_ptr<vk::raii::DeviceMemory> staging_memory;
-    CreateStagingBuffer(staging_buffer, staging_memory);
+    std::vector<float> host_data(compute_cell_count_);
+    for (int j = 0; j < grid_params_.ny; ++j) {
+        for (int i = 0; i < grid_params_.nx; ++i) {
+            host_data[grid_params_.Index(i, j)] = static_cast<float>(i + j * 100);
+        }
+    }
+    CreateStagingBuffer(host_data, staging_buffer, staging_memory);
     RecordStorageCommand(staging_buffer);
 }
 
 void Window::CreateStagingBuffer(
+        const std::vector<float>& data,
         std::unique_ptr<vk::raii::Buffer>& staging_buffer,
         std::unique_ptr<vk::raii::DeviceMemory>& staging_memory) const {
     vk::BufferCreateInfo ci{};
@@ -692,11 +699,7 @@ void Window::CreateStagingBuffer(
     staging_buffer->bindMemory(**staging_memory, 0);
     void* mp = staging_memory->mapMemory(0, compute_buf_size_);
 
-    float arr[compute_cell_count_];
-    for (int i = 0; i < compute_cell_count_; ++i) {
-        arr[i] = static_cast<float>(i);
-    }
-    std::memcpy(mp, arr, compute_buf_size_);
+    std::memcpy(mp, data.data(), compute_buf_size_);
     staging_memory->unmapMemory();
 }
 
@@ -867,9 +870,12 @@ void Window::ReadBackAndVerify() const {
     auto* p_res = static_cast<float*>(staging_mem.mapMemory(0, compute_buf_size_));
     bool pass = true;
     for (int i = 0; i < compute_cell_count_; ++i) {
-        if (float delta = std::abs(p_res[i] - static_cast<float>(i) * 2.0f); delta > 1e-5f) {
-            spdlog::warn("Value mismatch at index {}, delta: {}", i, delta);
+        float expected = 2.0f * static_cast<float>(i % grid_params_.nx + i / grid_params_.nx * 100);
+        if (float delta = std::abs(p_res[i] - expected); delta > 1e-5f) {
+            spdlog::warn("Value mismatch at index {}, expected: {}, actual: {}",
+                i, expected, p_res[i]);
             pass = false;
+            break;
         }
     }
     if (pass) {
