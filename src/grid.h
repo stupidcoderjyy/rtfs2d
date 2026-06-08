@@ -44,6 +44,27 @@ private:
     GridParams params_;
 };
 
+class VectorField {
+public:
+    explicit VectorField(const GridParams &params);
+
+    void Set(int i, int j, float u_val, float v_val) {
+        u_(i, j) = u_val;
+        v_(i, j) = v_val;
+    }
+
+    float U(int i, int j) const {
+        return u_(i, j);
+    }
+
+    float V(int i, int j) const {
+        return v_(i, j);
+    }
+private:
+    ScalarField u_;
+    ScalarField v_;
+};
+
 }
 
 
