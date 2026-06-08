@@ -12,3 +12,7 @@ GridParams::GridParams(int nx, int ny, float lx, float ly): nx(nx), ny(ny), lx(l
     dx = lx / static_cast<float>(nx);
     dy = ly / static_cast<float>(ny);
 }
+
+ScalarField::ScalarField(const GridParams &params): params_(params) {
+    data_.resize(params.TotalCells(), 0.0f);
+}

@@ -27,7 +27,23 @@ struct GridParams {
         return nx * ny;
     }
 };
-    
+
+class ScalarField {
+public:
+    explicit ScalarField(const GridParams &params);
+
+    float& operator()(int i, int j) {
+        return data_[params_.Index(i, j)];
+    }
+
+    const float& operator()(int i, int j) const {
+        return data_[params_.Index(i, j)];
+    }
+private:
+    std::vector<float> data_;
+    GridParams params_;
+};
+
 }
 
 
