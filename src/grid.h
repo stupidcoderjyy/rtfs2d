@@ -4,7 +4,6 @@
 
 #ifndef RTFS2D_GRID_H
 #define RTFS2D_GRID_H
-#include <cstdint>
 #include <vector>
 
 namespace rtfs2d {

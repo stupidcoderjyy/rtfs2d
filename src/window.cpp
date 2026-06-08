@@ -666,12 +666,7 @@ void Window::CreateStorageBuffer() {
 
     std::unique_ptr<vk::raii::Buffer> staging_buffer;
     std::unique_ptr<vk::raii::DeviceMemory> staging_memory;
-    std::vector<float> host_data(compute_cell_count_);
-    for (int j = 0; j < grid_params_.ny; ++j) {
-        for (int i = 0; i < grid_params_.nx; ++i) {
-            host_data[grid_params_.Index(i, j)] = static_cast<float>(i + j * 100);
-        }
-    }
+    std::vector host_data(compute_cell_count_, 0.0f);
     CreateStagingBuffer(host_data, staging_buffer, staging_memory);
     RecordStorageCommand(staging_buffer);
 }
@@ -817,7 +812,7 @@ void Window::RecordComputeCommands() {
     cb.begin({vk::CommandBufferUsageFlagBits::eSimultaneousUse});
     cb.bindPipeline(vk::PipelineBindPoint::eCompute, **compute_pipeline_);
     cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, **pipeline_layout_, 0, **descriptor_set_, nullptr);
-    int group_count = (compute_cell_count_ + 255) / 256;
+    int group_count = (compute_cell_count_ + 127) / 128;
     cb.dispatch(group_count, 1, 1);
     vk::BufferMemoryBarrier barrier{};
     barrier.setSrcAccessMask(vk::AccessFlagBits::eShaderWrite)
@@ -869,11 +864,15 @@ void Window::ReadBackAndVerify() const {
 
     auto* p_res = static_cast<float*>(staging_mem.mapMemory(0, compute_buf_size_));
     bool pass = true;
-    for (int i = 0; i < compute_cell_count_; ++i) {
-        float expected = 2.0f * static_cast<float>(i % grid_params_.nx + i / grid_params_.nx * 100);
-        if (float delta = std::abs(p_res[i] - expected); delta > 1e-5f) {
-            spdlog::warn("Value mismatch at index {}, expected: {}, actual: {}",
-                i, expected, p_res[i]);
+    for (int k = 0; k < compute_cell_count_; ++k) {
+        int i = k % grid_params_.nx, j = k / grid_params_.nx;
+        float fx = static_cast<float>(i) / static_cast<float>(grid_params_.nx);
+        float fy = static_cast<float>(j) / static_cast<float>(grid_params_.ny);
+        float r = std::sqrt((fx - 0.5f) * (fx - 0.5f) + (fy - 0.5f) * (fy - 0.5f)) * 2.0f;
+        float expected = std::sin(r * 20.0f) * 0.5f + 0.5f;
+        if (float delta = std::abs(p_res[k] - expected); delta > 1e-5f) {
+            spdlog::warn("Value mismatch at ({}, {}), expected: {}, actual: {}",
+                i, j, expected, p_res[k]);
             pass = false;
             break;
         }
