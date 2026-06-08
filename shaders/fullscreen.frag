@@ -3,18 +3,30 @@
 layout(location = 0) in vec2 fragUV;
 layout(location = 0) out vec4 outColor;
 
-// Push constant 用于传递时间
-layout(push_constant) uniform PushConstants {
-    float time;
-} pc;
+// 存储缓冲区：绑定到 set = 0, binding = 0，包含场数据
+layout(set = 0, binding = 0, std430) buffer FieldBuffer {
+    float values[];
+};
 
 void main() {
-    // 横向波浪位移：基于 UV 的 y 坐标和时间
-    float wave = sin(fragUV.y * 12.0 + pc.time * 2.5) * 0.06;
-    vec2 uv = fragUV + vec2(wave, 0.0);
+    // 网格分辨率（必须与 CPU 端的 grid_params_ 一致）
+    uint nx = 128u;
+    uint ny = 128u;
 
-    // 彩色条纹生成：余弦波叠加出 RGB 三通道不同相位
-    vec3 color = 0.5 + 0.5 * cos(uv.x * 20.0 + uv.y * 15.0 + vec3(0.0, 2.09439, 4.18879));
+    // 根据纹理坐标计算网格索引
+    uint i = uint(fragUV.x * float(nx));
+    uint j = uint(fragUV.y * float(ny));
 
-    outColor = vec4(color, 1.0);
+    // 防止越界
+    i = clamp(i, 0u, nx - 1u);
+    j = clamp(j, 0u, ny - 1u);
+
+    // 线性索引（行优先）
+    uint idx = i + j * nx;
+
+    // 读取场值
+    float val = values[idx];
+
+    // 输出灰度颜色
+    outColor = vec4(vec3(val), 1.0);
 }

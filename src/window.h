@@ -103,7 +103,7 @@ private:
     void CreateDescriptorSet();
     void CreateComputeCommandPool();
     void RecordComputeCommands();
-    void ReadBackAndVerify() const;
+    void VerifyFieldData() const;
 
     void CreateGraphicsPipeline();
 };
