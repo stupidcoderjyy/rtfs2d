@@ -1,5 +1,5 @@
 
-#include "Window.h"
+#include "window.h"
 #include <spdlog/spdlog.h>
 
 int main() {

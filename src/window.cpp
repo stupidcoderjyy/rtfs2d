@@ -2,7 +2,7 @@
 // Created by PC on 2026/6/5.
 //
 
-#include "Window.h"
+#include "window.h"
 
 #include <fstream>
 #include <spdlog/spdlog.h>
@@ -646,12 +646,12 @@ uint32_t Window::FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags pro
 
 void Window::CreateStorageBuffer() {
     vk::BufferCreateInfo ci{};
-    ci.setSize(kStorageBufferSize)
+    ci.setSize(compute_buf_size_)
         .setUsage(vk::BufferUsageFlagBits::eStorageBuffer |
             vk::BufferUsageFlagBits::eTransferSrc |
             vk::BufferUsageFlagBits::eTransferDst)
         .setSharingMode(vk::SharingMode::eExclusive);
-    storage_buffer_ = std::make_unique<vk::raii::Buffer>(device_->createBuffer(ci));
+    scalar_field_buffer_ = std::make_unique<vk::raii::Buffer>(device_->createBuffer(ci));
 
     vk::DeviceBufferMemoryRequirements bmr{};
     bmr.setPCreateInfo(&ci);
@@ -661,8 +661,8 @@ void Window::CreateStorageBuffer() {
     vk::MemoryAllocateInfo ai;
     ai.setAllocationSize(mr.size)
         .setMemoryTypeIndex(mti);
-    storage_memory_ = std::make_unique<vk::raii::DeviceMemory>(device_->allocateMemory(ai));
-    storage_buffer_->bindMemory(**storage_memory_, 0);
+    scalar_field_memory_ = std::make_unique<vk::raii::DeviceMemory>(device_->allocateMemory(ai));
+    scalar_field_buffer_->bindMemory(**scalar_field_memory_, 0);
 
     std::unique_ptr<vk::raii::Buffer> staging_buffer;
     std::unique_ptr<vk::raii::DeviceMemory> staging_memory;
@@ -674,7 +674,7 @@ void Window::CreateStagingBuffer(
         std::unique_ptr<vk::raii::Buffer>& staging_buffer,
         std::unique_ptr<vk::raii::DeviceMemory>& staging_memory) const {
     vk::BufferCreateInfo ci{};
-    ci.setSize(kStorageBufferSize)
+    ci.setSize(compute_buf_size_)
         .setUsage(vk::BufferUsageFlagBits::eTransferSrc)
         .setSharingMode(vk::SharingMode::eExclusive);
     staging_buffer = std::make_unique<vk::raii::Buffer>(device_->createBuffer(ci));
@@ -690,13 +690,13 @@ void Window::CreateStagingBuffer(
     staging_memory = std::make_unique<vk::raii::DeviceMemory>(device_->allocateMemory(ai));
 
     staging_buffer->bindMemory(**staging_memory, 0);
-    void* mp = staging_memory->mapMemory(0, kStorageBufferSize);
+    void* mp = staging_memory->mapMemory(0, compute_buf_size_);
 
-    float arr[1024];
-    for (int i = 0; i < 1024; ++i) {
+    float arr[compute_cell_count_];
+    for (int i = 0; i < compute_cell_count_; ++i) {
         arr[i] = static_cast<float>(i);
     }
-    std::memcpy(mp, arr, kStorageBufferSize);
+    std::memcpy(mp, arr, compute_buf_size_);
     staging_memory->unmapMemory();
 }
 
@@ -716,9 +716,9 @@ void Window::RecordStorageCommand(std::unique_ptr<vk::raii::Buffer> &staging_buf
     vk::BufferCopy copy_region;
     copy_region.setSrcOffset(0)
         .setDstOffset(0)
-        .setSize(kStorageBufferSize);
+        .setSize(compute_buf_size_);
 
-    cb.copyBuffer(**staging_buffer, **storage_buffer_, copy_region);
+    cb.copyBuffer(**staging_buffer, **scalar_field_buffer_, copy_region);
     cb.end();
 
     vk::SubmitInfo si;
@@ -783,9 +783,9 @@ void Window::CreateDescriptorSet() {
     descriptor_set_ = std::make_unique<vk::raii::DescriptorSet>(std::move(ds[0]));
 
     vk::DescriptorBufferInfo bi{};
-    bi.setBuffer(**storage_buffer_)
+    bi.setBuffer(**scalar_field_buffer_)
         .setOffset(0)
-        .setRange(kStorageBufferSize);
+        .setRange(VK_WHOLE_SIZE);
     vk::WriteDescriptorSet wds{};
     wds.setDstSet(**descriptor_set_)
         .setDstBinding(0)
@@ -814,13 +814,13 @@ void Window::RecordComputeCommands() {
     cb.begin({vk::CommandBufferUsageFlagBits::eSimultaneousUse});
     cb.bindPipeline(vk::PipelineBindPoint::eCompute, **compute_pipeline_);
     cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, **pipeline_layout_, 0, **descriptor_set_, nullptr);
-    int group_count = (kStorageElementCount + 255) / 256;
+    int group_count = (compute_cell_count_ + 255) / 256;
     cb.dispatch(group_count, 1, 1);
     vk::BufferMemoryBarrier barrier{};
     barrier.setSrcAccessMask(vk::AccessFlagBits::eShaderWrite)
         .setDstAccessMask(vk::AccessFlagBits::eHostRead)
-        .setBuffer(**storage_buffer_)
-        .setSize(kStorageBufferSize)
+        .setBuffer(**scalar_field_buffer_)
+        .setSize(compute_buf_size_)
         .setOffset(0)
         .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
         .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
@@ -832,7 +832,7 @@ void Window::RecordComputeCommands() {
 
 void Window::ReadBackAndVerify() const {
     vk::BufferCreateInfo ci{};
-    ci.setSize(kStorageBufferSize)
+    ci.setSize(compute_buf_size_)
         .setUsage(vk::BufferUsageFlagBits::eTransferDst)
         .setSharingMode(vk::SharingMode::eExclusive);
     auto staging_buf = device_->createBuffer(ci);
@@ -855,8 +855,8 @@ void Window::ReadBackAndVerify() const {
     cb.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
     vk::BufferCopy copy{};
     copy.setSrcOffset(0)
-        .setSize(kStorageBufferSize);
-    cb.copyBuffer(**storage_buffer_, *staging_buf, copy);
+        .setSize(compute_buf_size_);
+    cb.copyBuffer(**scalar_field_buffer_, *staging_buf, copy);
     cb.end();
 
     vk::SubmitInfo si{};
@@ -864,9 +864,9 @@ void Window::ReadBackAndVerify() const {
     graphics_queue_->submit(si);
     graphics_queue_->waitIdle();
 
-    auto* p_res = static_cast<float*>(staging_mem.mapMemory(0, kStorageBufferSize));
+    auto* p_res = static_cast<float*>(staging_mem.mapMemory(0, compute_buf_size_));
     bool pass = true;
-    for (int i = 0; i < 1024; ++i) {
+    for (int i = 0; i < compute_cell_count_; ++i) {
         if (float delta = std::abs(p_res[i] - static_cast<float>(i) * 2.0f); delta > 1e-5f) {
             spdlog::warn("Value mismatch at index {}, delta: {}", i, delta);
             pass = false;

@@ -9,6 +9,7 @@
 #define GLFW_INCLUDE_NONE
 #include <functional>
 #include <GLFW/glfw3.h>
+#include <grid.h>
 
 namespace rtfs2d {
 
@@ -50,10 +51,8 @@ private:
     bool frame_buffer_resized_ = false;
 
     std::unique_ptr<vk::raii::ShaderModule> compute_shader_module_;
-    std::unique_ptr<vk::raii::Buffer> storage_buffer_;
-    std::unique_ptr<vk::raii::DeviceMemory> storage_memory_;
-    static constexpr uint32_t kStorageElementCount = 1024;
-    static constexpr vk::DeviceSize kStorageBufferSize = kStorageElementCount * sizeof(float);
+    std::unique_ptr<vk::raii::Buffer> scalar_field_buffer_;
+    std::unique_ptr<vk::raii::DeviceMemory> scalar_field_memory_;
     std::unique_ptr<vk::raii::DescriptorSetLayout> descriptor_set_layout_;
     std::unique_ptr<vk::raii::PipelineLayout> pipeline_layout_;
     std::unique_ptr<vk::raii::Pipeline> compute_pipeline_;
@@ -62,12 +61,14 @@ private:
     std::unique_ptr<vk::raii::CommandPool> compute_command_pool_;
     std::unique_ptr<vk::raii::CommandBuffer> compute_command_buffer_;
     bool compute_verified_ = false;
+    const GridParams grid_params_{128, 128, 1.0f, 1.0f};
+    const int compute_cell_count_ = grid_params_.TotalCells();
+    const vk::DeviceSize compute_buf_size_ = compute_cell_count_ * sizeof(float);
 
     std::unique_ptr<vk::raii::ShaderModule> vert_shader_module_;
     std::unique_ptr<vk::raii::ShaderModule> frag_shader_module_;
     std::unique_ptr<vk::raii::PipelineLayout> graphics_pipeline_layout_;
     std::unique_ptr<vk::raii::Pipeline> graphics_pipeline_;
-
 
     void CreateVkInstance();
     std::vector<const char*> GetEnabledExtensions();
