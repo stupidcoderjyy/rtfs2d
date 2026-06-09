@@ -11,6 +11,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "vk_memory.h"
+
 using namespace rtfs2d;
 
 Window::Window(int width, int height, std::string title, bool debug_enabled):
@@ -636,16 +638,6 @@ std::unique_ptr<vk::raii::ShaderModule> Window::LoadShader(const std::string &pa
     return std::make_unique<vk::raii::ShaderModule>(device_->createShaderModule(ci));
 }
 
-uint32_t Window::FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const {
-    auto mp = physical_device_.getMemoryProperties();
-    for (int i = 0; i < mp.memoryTypes.size(); ++i) {
-        if (typeFilter & 1 << i && properties == mp.memoryTypes[i].propertyFlags) {
-            return i;
-        }
-    }
-    throw std::runtime_error("failed to find suitable memory type");
-}
-
 void Window::CreateStorageBuffer() {
     vk::BufferCreateInfo ci{};
     ci.setSize(compute_buf_size_)
@@ -658,7 +650,7 @@ void Window::CreateStorageBuffer() {
     vk::DeviceBufferMemoryRequirements bmr{};
     bmr.setPCreateInfo(&ci);
     auto mr = device_->getBufferMemoryRequirements(bmr).memoryRequirements;
-    auto mti = FindMemoryType(mr.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
+    auto mti = FindMemoryType(physical_device_, mr.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
     vk::MemoryAllocateInfo ai;
     ai.setAllocationSize(mr.size)
@@ -686,7 +678,7 @@ void Window::CreateStagingBuffer(
     vk::DeviceBufferMemoryRequirements bmr{};
     bmr.setPCreateInfo(&ci);
     auto mr = device_->getBufferMemoryRequirements(bmr).memoryRequirements;
-    auto mti = FindMemoryType(mr.memoryTypeBits,
+    auto mti = FindMemoryType(physical_device_, mr.memoryTypeBits,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
     vk::MemoryAllocateInfo ai;
     ai.setAllocationSize(mr.size)
@@ -839,7 +831,7 @@ void Window::VerifyFieldData() const {
     auto staging_buf = device_->createBuffer(ci);
 
     auto mr = staging_buf.getMemoryRequirements();
-    auto mti = FindMemoryType(mr.memoryTypeBits,
+    auto mti = FindMemoryType(physical_device_, mr.memoryTypeBits,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
     vk::MemoryAllocateInfo m_ai{};
     m_ai.setAllocationSize(mr.size)

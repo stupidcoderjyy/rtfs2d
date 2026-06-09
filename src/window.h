@@ -89,7 +89,6 @@ private:
     void RecreateSwapChain();
 
     std::unique_ptr<vk::raii::ShaderModule> LoadShader(const std::string& path) const;
-    uint32_t FindMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
     void CreateStorageBuffer();
     void CreateStagingBuffer(
         const std::vector<float>& data,
