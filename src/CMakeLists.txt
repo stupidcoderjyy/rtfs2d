@@ -3,7 +3,11 @@
 add_library(${TARGET} STATIC
         grid.cpp
         grid.h
+        vk_compute.cpp
+        vk_compute.h
         vk_descriptor.cpp
+        vk_compute.cpp
+        vk_compute.h
         vk_descriptor.h
         vk_device.cpp
         vk_device.h
