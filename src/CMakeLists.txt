@@ -7,6 +7,8 @@ add_library(${TARGET} STATIC
         grid.h
         vk_memory.cpp
         vk_memory.h
+        vk_device.cpp
+        vk_device.h
 )
 add_library(rtfs2d::core ALIAS ${TARGET})
 target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
