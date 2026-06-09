@@ -11,6 +11,8 @@ add_library(${TARGET} STATIC
         vk_descriptor.h
         vk_device.cpp
         vk_device.h
+        vk_graphics.cpp
+        vk_graphics.h
         vk_memory.cpp
         vk_memory.h
         vk_swapchain.cpp

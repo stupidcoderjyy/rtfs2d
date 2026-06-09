@@ -19,10 +19,8 @@ DeviceManager::DeviceManager(GLFWwindow *window, bool debug_enabled): debug_enab
     CreateComputeCommandPool();
 }
 
-std::unique_ptr<vk::raii::Pipeline> DeviceManager::CreateComputePipelineFromFile(
-        const vk::raii::PipelineLayout &layout,
-        const std::string &spv_path) const {
-    std::ifstream is(spv_path, std::ios::binary);
+std::unique_ptr<vk::raii::ShaderModule> DeviceManager::LoadShader(const std::string& path) const {
+    std::ifstream is(path, std::ios::binary);
     if (!is.is_open()) {
         throw std::runtime_error("failed to open");
     }
@@ -44,11 +42,17 @@ std::unique_ptr<vk::raii::Pipeline> DeviceManager::CreateComputePipelineFromFile
     vk::ShaderModuleCreateInfo ci{};
     ci.setCodeSize(buffer.size() * sizeof(uint32_t))
         .setPCode(buffer.data());
-    auto shader_module = device_->createShaderModule(ci);
+    return std::make_unique<vk::raii::ShaderModule>(device_->createShaderModule(ci));
+}
+
+std::unique_ptr<vk::raii::Pipeline> DeviceManager::CreateComputePipelineFromFile(
+        const vk::raii::PipelineLayout &layout,
+        const std::string &spv_path) const {
+    auto shader = LoadShader(spv_path);
 
     vk::PipelineShaderStageCreateInfo pss_ci{};
     pss_ci.setStage(vk::ShaderStageFlagBits::eCompute)
-        .setModule(*shader_module)
+        .setModule(**shader)
         .setPName("main");
     vk::ComputePipelineCreateInfo cp_ci{};
     cp_ci.setStage(pss_ci)

@@ -12,6 +12,7 @@
 #include "vk_swapchain.h"
 #include "vk_device.h"
 #include "vk_compute.h"
+#include "vk_graphics.h"
 
 namespace rtfs2d {
 
@@ -26,17 +27,9 @@ private:
     std::unique_ptr<DeviceManager> device_manager_;
     std::unique_ptr<SwapchainContext> swapchain_ctx_;
     std::unique_ptr<ComputeContext> compute_ctx_;
+    std::unique_ptr<GraphicsContext> graphics_ctx_;
     bool debug_enabled_;
     size_t current_frame_ = 0;
-
-    std::unique_ptr<vk::raii::PipelineLayout> graphics_pipeline_layout_;
-    std::unique_ptr<vk::raii::Pipeline> graphics_pipeline_;
-
-    void RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t img_idx) const;
-
-    std::unique_ptr<vk::raii::ShaderModule> LoadShader(const std::string& path) const;
-
-    void CreateGraphicsPipeline();
 };
 
 }

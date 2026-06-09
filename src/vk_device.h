@@ -14,6 +14,8 @@ class DeviceManager {
 public:
     DeviceManager(GLFWwindow* window, bool debug_enabled);
 
+    std::unique_ptr<vk::raii::ShaderModule> LoadShader(const std::string& path) const;
+
     std::unique_ptr<vk::raii::Pipeline> CreateComputePipelineFromFile(
         const vk::raii::PipelineLayout& layout,
         const std::string& spv_path) const;
