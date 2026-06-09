@@ -23,6 +23,15 @@ BufferAndMemory AllocateBuffer(
         vk::DeviceSize size,
         vk::BufferUsageFlags usage,
         vk::MemoryPropertyFlags memory_flags);
+
+void UploadBufferData(
+        const vk::raii::Device& device,
+        vk::PhysicalDevice physical_device,
+        const vk::raii::CommandPool& command_pool,
+        const vk::raii::Queue& queue,
+        const std::vector<float>& data,
+        const vk::raii::Buffer& dst_buffer);
+
 }
 
 #endif //RTFS2D_VK_MEMORY_H

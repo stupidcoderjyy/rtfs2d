@@ -90,11 +90,6 @@ private:
 
     std::unique_ptr<vk::raii::ShaderModule> LoadShader(const std::string& path) const;
     void CreateStorageBuffer();
-    void CreateStagingBuffer(
-        const std::vector<float>& data,
-        std::unique_ptr<vk::raii::Buffer>& staging_buffer,
-        std::unique_ptr<vk::raii::DeviceMemory>& staging_memory) const;
-    void RecordStorageCommand(std::unique_ptr<vk::raii::Buffer> &staging_buffer) const;
     void CreateDescriptorSetLayout();
     void CreatePipelineLayout();
     void CreateComputePipeline();

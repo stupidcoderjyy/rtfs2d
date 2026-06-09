@@ -639,85 +639,15 @@ std::unique_ptr<vk::raii::ShaderModule> Window::LoadShader(const std::string &pa
 }
 
 void Window::CreateStorageBuffer() {
-    vk::BufferCreateInfo ci{};
-    ci.setSize(compute_buf_size_)
-        .setUsage(vk::BufferUsageFlagBits::eStorageBuffer |
-            vk::BufferUsageFlagBits::eTransferSrc |
-            vk::BufferUsageFlagBits::eTransferDst)
-        .setSharingMode(vk::SharingMode::eExclusive);
-    scalar_field_buffer_ = std::make_unique<vk::raii::Buffer>(device_->createBuffer(ci));
-
-    vk::DeviceBufferMemoryRequirements bmr{};
-    bmr.setPCreateInfo(&ci);
-    auto mr = device_->getBufferMemoryRequirements(bmr).memoryRequirements;
-    auto mti = FindMemoryType(physical_device_, mr.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-    vk::MemoryAllocateInfo ai;
-    ai.setAllocationSize(mr.size)
-        .setMemoryTypeIndex(mti);
-    scalar_field_memory_ = std::make_unique<vk::raii::DeviceMemory>(device_->allocateMemory(ai));
-    scalar_field_buffer_->bindMemory(**scalar_field_memory_, 0);
-
-    std::unique_ptr<vk::raii::Buffer> staging_buffer;
-    std::unique_ptr<vk::raii::DeviceMemory> staging_memory;
+    auto [buf, mem] = AllocateBuffer(*device_, physical_device_, compute_buf_size_,
+        vk::BufferUsageFlagBits::eStorageBuffer
+            | vk::BufferUsageFlagBits::eTransferSrc
+            | vk::BufferUsageFlagBits::eTransferDst,
+        vk::MemoryPropertyFlagBits::eDeviceLocal);
+    scalar_field_buffer_ = std::move(buf);
+    scalar_field_memory_ = std::move(mem);
     std::vector host_data(compute_cell_count_, 0.0f);
-    CreateStagingBuffer(host_data, staging_buffer, staging_memory);
-    RecordStorageCommand(staging_buffer);
-}
-
-void Window::CreateStagingBuffer(
-        const std::vector<float>& data,
-        std::unique_ptr<vk::raii::Buffer>& staging_buffer,
-        std::unique_ptr<vk::raii::DeviceMemory>& staging_memory) const {
-    vk::BufferCreateInfo ci{};
-    ci.setSize(compute_buf_size_)
-        .setUsage(vk::BufferUsageFlagBits::eTransferSrc)
-        .setSharingMode(vk::SharingMode::eExclusive);
-    staging_buffer = std::make_unique<vk::raii::Buffer>(device_->createBuffer(ci));
-
-    vk::DeviceBufferMemoryRequirements bmr{};
-    bmr.setPCreateInfo(&ci);
-    auto mr = device_->getBufferMemoryRequirements(bmr).memoryRequirements;
-    auto mti = FindMemoryType(physical_device_, mr.memoryTypeBits,
-        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-    vk::MemoryAllocateInfo ai;
-    ai.setAllocationSize(mr.size)
-        .setMemoryTypeIndex(mti);
-    staging_memory = std::make_unique<vk::raii::DeviceMemory>(device_->allocateMemory(ai));
-
-    staging_buffer->bindMemory(**staging_memory, 0);
-    void* mp = staging_memory->mapMemory(0, compute_buf_size_);
-
-    std::memcpy(mp, data.data(), compute_buf_size_);
-    staging_memory->unmapMemory();
-}
-
-void Window::RecordStorageCommand(std::unique_ptr<vk::raii::Buffer> &staging_buffer) const {
-    // 分配临时命令缓冲区（已在题目中给出）
-    vk::CommandBufferAllocateInfo ai{};
-    ai.setCommandPool(**command_pool_)
-        .setCommandBufferCount(1)
-        .setLevel(vk::CommandBufferLevel::ePrimary);
-    std::vector<vk::raii::CommandBuffer> cbs = device_->allocateCommandBuffers(ai);
-    auto& cb = cbs.front();
-
-    // 开始命令缓冲区录制（OneTimeSubmit 标记优化）
-    cb.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-
-    // 构造拷贝区域：全缓冲区拷贝，偏移为 0
-    vk::BufferCopy copy_region;
-    copy_region.setSrcOffset(0)
-        .setDstOffset(0)
-        .setSize(compute_buf_size_);
-
-    cb.copyBuffer(**staging_buffer, **scalar_field_buffer_, copy_region);
-    cb.end();
-
-    vk::SubmitInfo si;
-    si.setCommandBuffers(*cb);
-
-    graphics_queue_->submit(si);
-    graphics_queue_->waitIdle();
+    UploadBufferData(*device_, physical_device_, *command_pool_, *graphics_queue_, host_data, *scalar_field_buffer_);
 }
 
 void Window::CreateDescriptorSetLayout() {
