@@ -2,15 +2,13 @@
 // Created by PC on 2026/6/5.
 //
 
-#include "window.h"
-
 #include <fstream>
 #include <spdlog/spdlog.h>
 #include <memory>
-#include <set>
 #include <stdexcept>
 #include <vector>
 
+#include "window.h"
 #include "vk_memory.h"
 
 using namespace rtfs2d;
@@ -29,25 +27,19 @@ void Window::Show() {
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         window_ = glfwCreateWindow(width_, height_, title_.c_str(), nullptr, nullptr);
         device_manager_ = std::make_unique<DeviceManager>(window_, debug_enabled_);
+        swapchain_ctx_ = std::make_unique<SwapchainContext>(*device_manager_, width_, height_);
         glfwSetWindowUserPointer(window_, this);
         glfwSetFramebufferSizeCallback(window_, [](GLFWwindow* win, int w, int h) {
             auto* rtfs_win = static_cast<Window*>(glfwGetWindowUserPointer(win));
-            rtfs_win->frame_buffer_resized_ = true;
+            rtfs_win->swapchain_ctx_->set_needs_recreate(true);
             rtfs_win->width_ = w;
             rtfs_win->height_ = h;
         });
         auto window_guard = std::shared_ptr<void>(nullptr, [this](...) {
             glfwDestroyWindow(window_);
         });
-        CreateSwapChain();
-        CreateImageViews();
-        CreateRenderPass();
-        CreateFrameBuffers();
-        CreateCommandBuffers();
         CreateStorageBuffer();
         CreateDescriptorSetLayout();
-        CreateFrameBasedSyncObjects();
-        CreateImageBasedSyncObjects();
 
         // 加载计算2倍浮点数的着色器程序
         compute_shader_module_ = LoadShader("shaders/compute.comp.spv");
@@ -62,26 +54,26 @@ void Window::Show() {
 
         // 主循环
         while (!glfwWindowShouldClose(window_)) {
-            if (frame_buffer_resized_) {
+            if (swapchain_ctx_->needs_recreate()) {
                 if (width_ == 0 || height_ == 0) {
                     glfwWaitEvents();   //最小化时阻塞当前线程，恢复窗口后再重建交换链
                 } else {
-                    RecreateSwapChain();
+                    swapchain_ctx_->Recreate(width_, height_);
                 }
                 continue;
             }
-            auto& cb = command_buffers_[current_frame_];
-            auto& fence = in_flight_fences_[current_frame_];
-            auto& acquire_sem = image_available_semaphores_[current_frame_];
+            auto& cb = swapchain_ctx_->command_buffers()[current_frame_];
+            auto& fence = swapchain_ctx_->in_flight_fence(current_frame_);
+            auto& acquire_sem = swapchain_ctx_->image_available_semaphore(current_frame_);
 
             // 当CPU运行速度过快，达到kMaxFramesInFlight的限制时，必须等待GPU完成该帧的渲染，才能进行下一次提交
             // 需要为每个飞行帧准备独立的fence
             // 当渲染速度较慢时，会在这里阻塞
-            if (auto result = device_manager_->device().waitForFences(**in_flight_fences_[current_frame_], VK_TRUE, UINT64_MAX);
+            if (auto result = device_manager_->device().waitForFences(*fence, VK_TRUE, UINT64_MAX);
                     result != vk::Result::eSuccess) {
                 throw std::runtime_error("waitForFences failed: " + std::to_string(static_cast<int>(result)));
             }
-            device_manager_->device().resetFences(**fence);
+            device_manager_->device().resetFences(*fence);
 
             // 完成并验证着色器计算
             vk::SubmitInfo c_si{};
@@ -98,10 +90,10 @@ void Window::Show() {
             // acquire_sem用于GPU端图形队列和呈现队列之间进行同步，避免对未完成呈现（只读）的图片进行渲染（写）
             // GPU端最多只有kMaxFramesInFlight张图片处于未完成渲染的状态，acquire_sem和kMaxFramesInFlight绑定
             // 当呈现速度较慢时，会在这里阻塞
-            auto [res, img_idx] = swapchain_->acquireNextImage(UINT64_MAX, **acquire_sem);
+            auto [res, img_idx] = swapchain_ctx_->AcquireImage(acquire_sem);
             if (res == vk::Result::eErrorOutOfDateKHR) {
                 spdlog::warn("failed to acquire image from swapchain, try recreate swapchain");
-                RecreateSwapChain();
+                swapchain_ctx_->Recreate(width_, height_);
                 continue;
             }
 
@@ -113,28 +105,21 @@ void Window::Show() {
             // render_sem的作用是在GPU端图形队列和呈现队列之间进行同步，避免把未完成渲染的图片输出到屏幕
             // 需要为每张交换链图像准备一个独立的render_sem
             vk::PipelineStageFlags stage_flags = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-            auto& render_sem = render_finished_semaphores_[img_idx];
+            auto& render_sem = swapchain_ctx_->render_finished_semaphore(img_idx);
             vk::SubmitInfo si{};
-            si.setWaitSemaphores(**acquire_sem)
+            si.setWaitSemaphores(*acquire_sem)
                 .setWaitDstStageMask(stage_flags)
-                .setSignalSemaphores(**render_sem)
+                .setSignalSemaphores(*render_sem)
                 .setCommandBuffers(*cb);
-            device_manager_->graphics_queue().submit(si, **fence);
+            device_manager_->graphics_queue().submit(si, *fence);
 
             // 将图像加入呈现队列。呈现和渲染是GPU中两个独立的模块，每张图片基于render_sem进行同步
-            vk::PresentInfoKHR pi{};
-            pi.setWaitSemaphores(**render_sem)
-                .setSwapchains(**swapchain_)
-                .setImageIndices(img_idx);
-            if (auto result = device_manager_->present_queue().presentKHR(pi);
-                    result == vk::Result::eErrorOutOfDateKHR ||
-                    result == vk::Result::eSuboptimalKHR) {
-                spdlog::warn("failed to present image: {}, try recreate swapchain", static_cast<int>(result));
-                frame_buffer_resized_ = true;
+            if (auto pres_res = swapchain_ctx_->Present(device_manager_->present_queue(), img_idx, render_sem); pres_res != vk::Result::eSuccess) {
+                spdlog::warn("present returned: {}", static_cast<int>(pres_res));
             }
 
             // 更新帧索引
-            current_frame_ = (current_frame_ + 1) % kMaxFramesInFlight;
+            current_frame_ = (current_frame_ + 1) % 2;
             glfwPollEvents();
         }
         device_manager_->device().waitIdle();
@@ -145,184 +130,7 @@ void Window::Show() {
     }
 }
 
-void Window::CreateSwapChain(bool replace) {
-    vk::SwapchainCreateInfoKHR ci{};
-
-    if (replace) {
-        ci.setOldSwapchain(**swapchain_);
-    }
-
-    // 指定交换链渲染的目标表面
-    ci.setSurface(*device_manager_->surface());
-
-    // 查询 surface 的能力上限（最小/最大图像数量、当前窗口尺寸等）
-    auto capabilities = device_manager_->physical_device().getSurfaceCapabilitiesKHR(*device_manager_->surface());
-    vk::Extent2D ext = capabilities.currentExtent;  // 当前窗口尺寸
-    // 若窗口系统不提供固定尺寸（currentExtent 为 UINT32_MAX），则用构造参数手动 clamp
-    if (ext.width == UINT32_MAX) {
-        ext.width = std::clamp(
-            static_cast<uint32_t>(width_),
-            capabilities.minImageExtent.width,
-            capabilities.maxImageExtent.width);
-        ext.height = std::clamp(
-            static_cast<uint32_t>(height_),
-            capabilities.minImageExtent.height,
-            capabilities.maxImageExtent.height);
-    }
-    swapchain_extent_ = ext;
-    ci.setImageExtent(swapchain_extent_);
-
-    // 查询 surface 支持的像素格式和色彩空间，优先选择 sRGB
-    auto formats = device_manager_->physical_device().getSurfaceFormatsKHR(*device_manager_->surface());
-    auto it = std::ranges::find_if(formats, [](const auto& fmt) {
-        return fmt.format == vk::Format::eB8G8R8A8Srgb && fmt.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
-    });
-    // 若首选格式不存在，取列表第一个作为降级方案
-    vk::SurfaceFormatKHR format = it != formats.end() ? *it : formats[0];
-    swapchain_image_format_ = format.format;
-    swapchain_color_space_ = format.colorSpace;
-    ci.setImageFormat(swapchain_image_format_).setImageColorSpace(swapchain_color_space_);
-
-    // 选择 FIFO 呈现模式（V-Sync），所有 Vulkan 实现必须支持
-    constexpr auto present_mode = vk::PresentModeKHR::eFifo;
-    if (auto modes = device_manager_->physical_device().getSurfacePresentModesKHR(*device_manager_->surface());
-            std::ranges::find(modes, present_mode) == modes.end()) {
-        throw std::runtime_error("No suitable present mode found");
-    }
-    ci.setPresentMode(present_mode);
-
-    // 图像层数，普通 2D 应用设为 1
-    ci.setImageArrayLayers(1);
-
-    // 最少图像数量：minImageCount + 1 以减少等待，但不超 maxImageCount
-    uint32_t min_img_count = capabilities.minImageCount + 1;
-    if (capabilities.maxImageCount > 0 && min_img_count > capabilities.maxImageCount) {
-        min_img_count = capabilities.maxImageCount;
-    }
-    ci.setMinImageCount(min_img_count);
-
-    // 交换链图像将作为颜色附件进行渲染
-    ci.setImageUsage(vk::ImageUsageFlagBits::eColorAttachment);
-
-    // 使用 surface 的当前变换（旋转等），不做额外处理
-    ci.setPreTransform(capabilities.currentTransform);
-
-    // 窗口与桌面合成时不透明
-    ci.setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque);
-
-    // 允许 Vulkan 裁剪被遮挡的像素
-    ci.setClipped(VK_TRUE);
-
-    // 若 graphics 和 present 是同一队列族，使用独占模式；否则使用并发模式
-    if (device_manager_->graphics_queue_family_index() == device_manager_->present_queue_family_index()) {
-        ci.setImageSharingMode(vk::SharingMode::eExclusive);
-    } else {
-        uint32_t indices[] = { device_manager_->graphics_queue_family_index(), device_manager_->present_queue_family_index() };
-        ci.setImageSharingMode(vk::SharingMode::eConcurrent).setQueueFamilyIndices(indices);
-    }
-
-    // 创建 RAII 交换链，析构时自动销毁
-    swapchain_ = std::make_unique<vk::raii::SwapchainKHR>(device_manager_->device(), ci);
-    // 获取交换链中的图像数组
-    swapchain_images_ = swapchain_->getImages();
-    image_layouts_ = std::vector(swapchain_images_.size(), vk::ImageLayout::eUndefined);
-}
-
-void Window::CreateImageViews() {
-    for (const auto& img : swapchain_images_) {
-        vk::ImageViewCreateInfo ci{};
-        ci.setImage(img)
-            .setViewType(vk::ImageViewType::e2D)
-            .setFormat(swapchain_image_format_)
-            .setSubresourceRange({
-                vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1
-            });
-        swapchain_image_views_.push_back(
-            std::make_unique<vk::raii::ImageView>(device_manager_->device().createImageView(ci))
-        );
-    }
-}
-
-void Window::CreateRenderPass() {
-    // 定义一个颜色附件：像素格式与交换链一致
-    vk::AttachmentDescription attachments[]{{}};
-    attachments[0].setFormat(swapchain_image_format_)
-        .setSamples(vk::SampleCountFlagBits::e1)            // 不使用多重采样
-        .setLoadOp(vk::AttachmentLoadOp::eClear)            // 渲染前清空附件
-        .setStoreOp(vk::AttachmentStoreOp::eStore)          // 渲染后保留结果，供呈现用
-        .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)  // 不使用模板缓冲
-        .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
-        .setInitialLayout(vk::ImageLayout::eColorAttachmentOptimal)
-        .setFinalLayout(vk::ImageLayout::ePresentSrcKHR);   // 渲染后转为呈现布局
-
-    // subpass 中引用附件的描述：索引 0，布局为颜色附件最优
-    vk::AttachmentReference ar{};
-    ar.setAttachment(0)
-        .setLayout(vk::ImageLayout::eColorAttachmentOptimal);
-
-    // 定义一个图形 subpass，引用上述颜色附件
-    vk::SubpassDescription subpasses[]{{}};
-    subpasses[0].setPipelineBindPoint(vk::PipelineBindPoint::eGraphics)
-        .setColorAttachmentCount(1)
-        .setPColorAttachments(&ar);
-
-    // 组装渲染通道创建信息
-    vk::RenderPassCreateInfo ci{};
-    ci.setAttachmentCount(1)
-        .setPAttachments(attachments)
-        .setSubpassCount(1)
-        .setPSubpasses(subpasses);
-
-    // 创建 RAII 渲染通道，析构时自动销毁
-    render_pass_ = std::make_unique<vk::raii::RenderPass>(device_manager_->device().createRenderPass(ci));
-}
-
-void Window::CreateFrameBuffers() {
-    // 为每个 swapchain image view 创建对应的帧缓冲
-    for (const auto& view : swapchain_image_views_) {
-        vk::FramebufferCreateInfo ci{};
-        ci.setRenderPass(*render_pass_)     // 帧缓冲兼容的渲染通道
-            .setAttachmentCount(1)          // 附件数量
-            .setPAttachments(&**view)       // 附件列表，解引用 RAII 句柄获取底层指针
-            .setWidth(swapchain_extent_.width)    // 帧缓冲宽度与交换链一致
-            .setHeight(swapchain_extent_.height)  // 帧缓冲高度与交换链一致
-            .setLayers(1);                  // 单层
-        // 创建 RAII 帧缓冲，析构时自动销毁
-        framebuffers_.push_back(
-            std::make_unique<vk::raii::Framebuffer>(device_manager_->device().createFramebuffer(ci))
-        );
-    }
-}
-
-void Window::CreateCommandBuffers() {
-    // 从命令池分配命令缓冲，数量与帧缓冲一致
-    vk::CommandBufferAllocateInfo ai{};
-    ai.setCommandPool(device_manager_->command_pool())
-        .setCommandBufferCount(kMaxFramesInFlight)             // 和“飞行帧”数量一致
-        .setLevel(vk::CommandBufferLevel::ePrimary);           // 主命令缓冲
-    command_buffers_ = device_manager_->device().allocateCommandBuffers(ai);
-}
-
-void Window::CreateFrameBasedSyncObjects() {
-    vk::FenceCreateInfo ci{};
-    ci.setFlags(vk::FenceCreateFlagBits::eSignaled);
-    for (int i = 0; i < kMaxFramesInFlight; ++i) {
-        image_available_semaphores_[i] =
-            std::make_unique<vk::raii::Semaphore>(device_manager_->device().createSemaphore({}));
-        in_flight_fences_[i] =
-            std::make_unique<vk::raii::Fence>(device_manager_->device().createFence(ci));
-    }
-}
-
-void Window::CreateImageBasedSyncObjects() {
-    for (int i = 0; i < swapchain_images_.size(); ++i) {
-        render_finished_semaphores_.push_back(
-            std::make_unique<vk::raii::Semaphore>(device_manager_->device().createSemaphore({}))
-        );
-    }
-}
-
-void Window::RecordCommands(const vk::raii::CommandBuffer &cb, uint32_t img_idx) {
+void Window::RecordCommands(const vk::raii::CommandBuffer &cb, uint32_t img_idx) const {
     cb.begin({});
 
     // 图像布局转换：从旧布局到颜色附件最优布局
@@ -333,8 +141,8 @@ void Window::RecordCommands(const vk::raii::CommandBuffer &cb, uint32_t img_idx)
         .setLevelCount(1)
         .setBaseArrayLayer(0)
         .setLayerCount(1);
-    barrier.setImage(swapchain_images_[img_idx])
-        .setOldLayout(image_layouts_[img_idx])
+    barrier.setImage(swapchain_ctx_->swapchain_images()[img_idx])
+        .setOldLayout(swapchain_ctx_->image_layouts()[img_idx])
         .setNewLayout(vk::ImageLayout::eColorAttachmentOptimal)
         .setSrcAccessMask(vk::AccessFlagBits::eNone)
         .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite)
@@ -348,19 +156,19 @@ void Window::RecordCommands(const vk::raii::CommandBuffer &cb, uint32_t img_idx)
     // 开始渲染通道，清除颜色为黑色
     vk::ClearValue clear_value{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}};
     vk::RenderPassBeginInfo bi{};
-    bi.setRenderPass(*render_pass_)
-        .setFramebuffer(*framebuffers_[img_idx])
-        .setRenderArea({{0, 0, swapchain_extent_.width, swapchain_extent_.height}})
+    bi.setRenderPass(swapchain_ctx_->render_pass())
+        .setFramebuffer(*swapchain_ctx_->framebuffers()[img_idx])
+        .setRenderArea({{0, 0, swapchain_ctx_->extent().width, swapchain_ctx_->extent().height}})
         .setClearValueCount(1)
         .setPClearValues(&clear_value);
     cb.beginRenderPass(bi, vk::SubpassContents::eInline);
 
     // 设置动态视口和剪刀（必须与交换链尺寸一致）
     vk::Viewport viewport(0.0f, 0.0f,
-        static_cast<float>(swapchain_extent_.width),
-        static_cast<float>(swapchain_extent_.height),
+        static_cast<float>(swapchain_ctx_->extent().width),
+        static_cast<float>(swapchain_ctx_->extent().height),
         0.0f, 1.0f);
-    vk::Rect2D scissor({0, 0}, swapchain_extent_);
+    vk::Rect2D scissor({0, 0}, swapchain_ctx_->extent());
     cb.setViewport(0, viewport);
     cb.setScissor(0, scissor);
 
@@ -378,20 +186,7 @@ void Window::RecordCommands(const vk::raii::CommandBuffer &cb, uint32_t img_idx)
 
     // 将图像布局转换为呈现源布局
     cb.end();
-    image_layouts_[img_idx] = vk::ImageLayout::ePresentSrcKHR;
-}
-
-void Window::RecreateSwapChain() {
-    spdlog::warn("Recreate swapchain");
-    device_manager_->device().waitIdle();
-    framebuffers_.clear();
-    swapchain_image_views_.clear();
-    render_finished_semaphores_.clear();
-    CreateSwapChain(true);
-    CreateImageViews();
-    CreateFrameBuffers();
-    CreateImageBasedSyncObjects();
-    frame_buffer_resized_ = false;
+    swapchain_ctx_->image_layouts()[img_idx] = vk::ImageLayout::ePresentSrcKHR;
 }
 
 std::unique_ptr<vk::raii::ShaderModule> Window::LoadShader(const std::string &path) const {
@@ -666,7 +461,7 @@ void Window::CreateGraphicsPipeline() {
         .setPColorBlendState(&colorBlending)
         .setPDynamicState(&dynamicState)
         .setLayout(**graphics_pipeline_layout_)
-        .setRenderPass(**render_pass_)
+        .setRenderPass(swapchain_ctx_->render_pass())
         .setSubpass(0);
 
     // 创建图形管线
