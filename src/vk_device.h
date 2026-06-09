@@ -14,34 +14,19 @@ class DeviceManager {
 public:
     DeviceManager(GLFWwindow* window, bool debug_enabled);
 
-    vk::raii::SurfaceKHR& surface() const {
-        return *surface_;
-    }
+    std::unique_ptr<vk::raii::Pipeline> CreateComputePipelineFromFile(
+        const vk::raii::PipelineLayout& layout,
+        const std::string& spv_path) const;
 
-    vk::raii::PhysicalDevice& physical_device() {
-        return physical_device_;
-    }
-    const vk::raii::Device& device() const {
-        return *device_;
-    }
-    const vk::raii::Queue& graphics_queue() const {
-        return *graphics_queue_;
-    }
-    const vk::raii::Queue& present_queue() const {
-        return *present_queue_;
-    }
-    const vk::raii::CommandPool& command_pool() const {
-        return *command_pool_;
-    }
-    const vk::raii::CommandPool& compute_command_pool() const {
-        return *compute_command_pool_;
-    }
-    uint32_t graphics_queue_family_index() const {
-        return graphics_queue_family_index_;
-    }
-    uint32_t present_queue_family_index() const {
-        return present_queue_family_index_;
-    }
+    vk::raii::SurfaceKHR& surface() const { return *surface_; }
+    vk::raii::PhysicalDevice& physical_device() { return physical_device_; }
+    const vk::raii::Device& device() const { return *device_; }
+    const vk::raii::Queue& graphics_queue() const { return *graphics_queue_; }
+    const vk::raii::Queue& present_queue() const { return *present_queue_; }
+    const vk::raii::CommandPool& command_pool() const { return *command_pool_; }
+    const vk::raii::CommandPool& compute_command_pool() const { return *compute_command_pool_; }
+    uint32_t graphics_queue_family_index() const { return graphics_queue_family_index_; }
+    uint32_t present_queue_family_index() const { return present_queue_family_index_; }
 private:
     std::unique_ptr<vk::raii::Instance> instance_;
     bool debug_enabled_;

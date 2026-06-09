@@ -49,8 +49,6 @@ void Window::Show() {
         dsb.WriteBuffer(*descriptor_set_, 0, *scalar_field_buffer_);
 
         // 加载计算2倍浮点数的着色器程序
-        compute_shader_module_ = LoadShader("shaders/compute.comp.spv");
-        CreatePipelineLayout();
         CreateComputePipeline();
         RecordComputeCommands();
 
@@ -232,24 +230,14 @@ void Window::CreateStorageBuffer() {
     UploadBufferData(device_manager_->device(), device_manager_->physical_device(), device_manager_->command_pool(), device_manager_->graphics_queue(), host_data, *scalar_field_buffer_);
 }
 
-void Window::CreatePipelineLayout() {
+void Window::CreateComputePipeline() {
     vk::PipelineLayoutCreateInfo ci{};
     ci.setSetLayoutCount(1)
         .setPSetLayouts(&**descriptor_set_layout_);
     pipeline_layout_ = std::make_unique<vk::raii::PipelineLayout>(
         device_manager_->device().createPipelineLayout(ci));
-}
-
-void Window::CreateComputePipeline() {
-    vk::PipelineShaderStageCreateInfo pss_ci{};
-    pss_ci.setStage(vk::ShaderStageFlagBits::eCompute)
-        .setModule(**compute_shader_module_)
-        .setPName("main");
-    vk::ComputePipelineCreateInfo cp_ci{};
-    cp_ci.setStage(pss_ci)
-        .setLayout(**pipeline_layout_);
-    compute_pipeline_ = std::make_unique<vk::raii::Pipeline>(
-        device_manager_->device().createComputePipeline(nullptr, cp_ci));
+    compute_pipeline_ = device_manager_->CreateComputePipelineFromFile(
+        *pipeline_layout_, "shaders/compute.comp.spv");
 }
 
 void Window::RecordComputeCommands() {
@@ -336,18 +324,18 @@ void Window::VerifyFieldData() const {
 
 void Window::CreateGraphicsPipeline() {
     // 加载顶点和片段着色器
-    vert_shader_module_ = LoadShader("shaders/fullscreen.vert.spv");
-    frag_shader_module_ = LoadShader("shaders/fullscreen.frag.spv");
+    auto vert_shader_module = LoadShader("shaders/fullscreen.vert.spv");
+    auto frag_shader_module = LoadShader("shaders/fullscreen.frag.spv");
 
     // 着色器阶段
     vk::PipelineShaderStageCreateInfo vertexStage{};
     vertexStage.setStage(vk::ShaderStageFlagBits::eVertex)
-        .setModule(**vert_shader_module_)
+        .setModule(**vert_shader_module)
         .setPName("main");
 
     vk::PipelineShaderStageCreateInfo fragmentStage{};
     fragmentStage.setStage(vk::ShaderStageFlagBits::eFragment)
-        .setModule(**frag_shader_module_)
+        .setModule(**frag_shader_module)
         .setPName("main");
 
     std::array stages = {vertexStage, fragmentStage};

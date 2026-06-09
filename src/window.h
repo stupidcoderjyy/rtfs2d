@@ -27,7 +27,6 @@ private:
     bool debug_enabled_;
     size_t current_frame_ = 0;
 
-    std::unique_ptr<vk::raii::ShaderModule> compute_shader_module_;
     std::unique_ptr<vk::raii::Buffer> scalar_field_buffer_;
     std::unique_ptr<vk::raii::DeviceMemory> scalar_field_memory_;
     std::unique_ptr<vk::raii::DescriptorSetLayout> descriptor_set_layout_;
@@ -41,8 +40,6 @@ private:
     const int compute_cell_count_ = grid_params_.TotalCells();
     const vk::DeviceSize compute_buf_size_ = compute_cell_count_ * sizeof(float);
 
-    std::unique_ptr<vk::raii::ShaderModule> vert_shader_module_;
-    std::unique_ptr<vk::raii::ShaderModule> frag_shader_module_;
     std::unique_ptr<vk::raii::PipelineLayout> graphics_pipeline_layout_;
     std::unique_ptr<vk::raii::Pipeline> graphics_pipeline_;
 
@@ -50,7 +47,6 @@ private:
 
     std::unique_ptr<vk::raii::ShaderModule> LoadShader(const std::string& path) const;
     void CreateStorageBuffer();
-    void CreatePipelineLayout();
     void CreateComputePipeline();
     void RecordComputeCommands();
     void VerifyFieldData() const;

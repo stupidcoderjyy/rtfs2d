@@ -4,6 +4,7 @@
 
 #include "vk_device.h"
 
+#include <fstream>
 #include <set>
 #include <spdlog/spdlog.h>
 
@@ -16,6 +17,44 @@ DeviceManager::DeviceManager(GLFWwindow *window, bool debug_enabled): debug_enab
     CreateLogicalDevice();
     CreateCommandPool();
     CreateComputeCommandPool();
+}
+
+std::unique_ptr<vk::raii::Pipeline> DeviceManager::CreateComputePipelineFromFile(
+        const vk::raii::PipelineLayout &layout,
+        const std::string &spv_path) const {
+    std::ifstream is(spv_path, std::ios::binary);
+    if (!is.is_open()) {
+        throw std::runtime_error("failed to open");
+    }
+    // 获取文件大小并检查是否为 4 的倍数
+    is.seekg(0, std::ios::end);
+    std::streamsize fs = is.tellg();
+    if (fs % sizeof(uint32_t) != 0) {
+        throw std::runtime_error("SPIR-V file size is not a multiple of 4 bytes");
+    }
+
+    std::vector<uint32_t> buffer(fs / sizeof(uint32_t));
+    is.seekg(0, std::ios::beg);
+    is.read(reinterpret_cast<char*>(buffer.data()), fs);
+
+    if (is.gcount() != fs) {
+        throw std::runtime_error("failed to read");
+    }
+
+    vk::ShaderModuleCreateInfo ci{};
+    ci.setCodeSize(buffer.size() * sizeof(uint32_t))
+        .setPCode(buffer.data());
+    auto shader_module = device_->createShaderModule(ci);
+
+    vk::PipelineShaderStageCreateInfo pss_ci{};
+    pss_ci.setStage(vk::ShaderStageFlagBits::eCompute)
+        .setModule(*shader_module)
+        .setPName("main");
+    vk::ComputePipelineCreateInfo cp_ci{};
+    cp_ci.setStage(pss_ci)
+        .setLayout(layout);
+    return std::make_unique<vk::raii::Pipeline>(
+        device_->createComputePipeline(nullptr, cp_ci));
 }
 
 void DeviceManager::CreateVkInstance() {
