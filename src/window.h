@@ -50,11 +50,8 @@ private:
 
     std::unique_ptr<vk::raii::ShaderModule> LoadShader(const std::string& path) const;
     void CreateStorageBuffer();
-    void CreateDescriptorSetLayout();
     void CreatePipelineLayout();
     void CreateComputePipeline();
-    void CreateDescriptorPool();
-    void CreateDescriptorSet();
     void RecordComputeCommands();
     void VerifyFieldData() const;
 

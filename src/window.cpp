@@ -10,6 +10,7 @@
 
 #include "window.h"
 #include "vk_memory.h"
+#include "vk_descriptor.h"
 
 using namespace rtfs2d;
 
@@ -39,14 +40,18 @@ void Window::Show() {
             glfwDestroyWindow(window_);
         });
         CreateStorageBuffer();
-        CreateDescriptorSetLayout();
+        DescriptorSetBuilder dsb(device_manager_->device());
+        dsb.AddStorageBufferBinding(0, vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eFragment);
+        auto [ds_layout, ds_pool, ds_set] = dsb.build();
+        descriptor_set_layout_ = std::move(ds_layout);
+        descriptor_pool_ = std::move(ds_pool);
+        descriptor_set_ = std::move(ds_set);
+        dsb.WriteBuffer(*descriptor_set_, 0, *scalar_field_buffer_);
 
         // 加载计算2倍浮点数的着色器程序
         compute_shader_module_ = LoadShader("shaders/compute.comp.spv");
         CreatePipelineLayout();
         CreateComputePipeline();
-        CreateDescriptorPool();
-        CreateDescriptorSet();
         RecordComputeCommands();
 
         // 创建波浪界面的图形管线
@@ -227,20 +232,6 @@ void Window::CreateStorageBuffer() {
     UploadBufferData(device_manager_->device(), device_manager_->physical_device(), device_manager_->command_pool(), device_manager_->graphics_queue(), host_data, *scalar_field_buffer_);
 }
 
-void Window::CreateDescriptorSetLayout() {
-    vk::DescriptorSetLayoutBinding lb{};
-    lb.setBinding(0)
-        .setDescriptorType(vk::DescriptorType::eStorageBuffer)
-        .setDescriptorCount(1)
-        .setStageFlags(vk::ShaderStageFlagBits::eCompute |
-            vk::ShaderStageFlagBits::eFragment);
-    vk::DescriptorSetLayoutCreateInfo ci{};
-    ci.setBindingCount(1)
-        .setPBindings(&lb);
-    descriptor_set_layout_ = std::make_unique<vk::raii::DescriptorSetLayout>(
-        device_manager_->device().createDescriptorSetLayout(ci));
-}
-
 void Window::CreatePipelineLayout() {
     vk::PipelineLayoutCreateInfo ci{};
     ci.setSetLayoutCount(1)
@@ -260,41 +251,6 @@ void Window::CreateComputePipeline() {
     compute_pipeline_ = std::make_unique<vk::raii::Pipeline>(
         device_manager_->device().createComputePipeline(nullptr, cp_ci));
 }
-
-void Window::CreateDescriptorPool() {
-    vk::DescriptorPoolSize ps{};
-    ps.setType(vk::DescriptorType::eStorageBuffer)
-        .setDescriptorCount(1);
-    vk::DescriptorPoolCreateInfo ci{};
-    ci.setPoolSizeCount(1)
-        .setPPoolSizes(&ps)
-        .setMaxSets(1)
-        .setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
-    descriptor_pool_ = std::make_unique<vk::raii::DescriptorPool>(
-        device_manager_->device().createDescriptorPool(ci));
-}
-
-void Window::CreateDescriptorSet() {
-    vk::DescriptorSetAllocateInfo ai{};
-    ai.setDescriptorSetCount(1)
-        .setDescriptorPool(**descriptor_pool_)
-        .setPSetLayouts(&**descriptor_set_layout_);
-    auto ds = device_manager_->device().allocateDescriptorSets(ai);
-    descriptor_set_ = std::make_unique<vk::raii::DescriptorSet>(std::move(ds[0]));
-
-    vk::DescriptorBufferInfo bi{};
-    bi.setBuffer(**scalar_field_buffer_)
-        .setOffset(0)
-        .setRange(VK_WHOLE_SIZE);
-    vk::WriteDescriptorSet wds{};
-    wds.setDstSet(**descriptor_set_)
-        .setDstBinding(0)
-        .setDescriptorType(vk::DescriptorType::eStorageBuffer)
-        .setDescriptorCount(1)
-        .setPBufferInfo(&bi);
-    device_manager_->device().updateDescriptorSets(wds, nullptr);
-}
-
 
 void Window::RecordComputeCommands() {
     vk::CommandBufferAllocateInfo ai{};
