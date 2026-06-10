@@ -31,6 +31,9 @@ private:
 
     std::unique_ptr<vk::raii::Buffer> scalar_field_buffer_;
     std::unique_ptr<vk::raii::DeviceMemory> scalar_field_memory_;
+    // { u_src, u_dst, v_src, v_dst }
+    std::vector<std::unique_ptr<vk::raii::Buffer>> velocity_buffers_;
+    std::vector<std::unique_ptr<vk::raii::DeviceMemory>> velocity_memories_;
     std::unique_ptr<vk::raii::DescriptorSetLayout> descriptor_set_layout_;
     std::unique_ptr<vk::raii::PipelineLayout> pipeline_layout_;
     std::unique_ptr<vk::raii::Pipeline> compute_pipeline_;
@@ -43,6 +46,7 @@ private:
     const vk::DeviceSize compute_buf_size_ = compute_cell_count_ * sizeof(float);
 
     void CreateStorageBuffer();
+    void CreateVelocityBuffers();
     void CreateDescriptorSets();
     void CreateComputePipeline();
     void RecordComputeCommands();

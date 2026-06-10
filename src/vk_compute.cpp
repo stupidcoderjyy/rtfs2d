@@ -15,6 +15,7 @@ using namespace rtfs2d;
 
 ComputeContext::ComputeContext(DeviceManager& dm): dm_(&dm) {
     CreateStorageBuffer();
+    CreateVelocityBuffers();
     CreateDescriptorSets();
     CreateComputePipeline();
     RecordComputeCommands();
@@ -33,6 +34,23 @@ void ComputeContext::CreateStorageBuffer() {
         dm_->graphics_queue(), host_data, *scalar_field_buffer_);
 }
 
+void ComputeContext::CreateVelocityBuffers() {
+    velocity_buffers_.resize(4);
+    velocity_memories_.resize(4);
+    std::vector host_data(compute_cell_count_, 0.0f);
+    for (int i = 0; i < 4; ++i) {
+        auto [buf, mem] = AllocateBuffer(dm_->device(), dm_->physical_device(), compute_buf_size_,
+            vk::BufferUsageFlagBits::eStorageBuffer
+                | vk::BufferUsageFlagBits::eTransferSrc
+                | vk::BufferUsageFlagBits::eTransferDst,
+                vk::MemoryPropertyFlagBits::eDeviceLocal);
+        velocity_buffers_[i] = std::move(buf);
+        velocity_memories_[i] = std::move(mem);
+        UploadBufferData(dm_->device(), dm_->physical_device(), dm_->command_pool(),
+            dm_->graphics_queue(), host_data, *velocity_buffers_[i]);
+    }
+}
+
 void ComputeContext::CreateDescriptorSets() {
     DescriptorSetBuilder dsb(dm_->device());
     for (int i = 0; i < 4; ++i) {
@@ -42,9 +60,10 @@ void ComputeContext::CreateDescriptorSets() {
     descriptor_set_layout_ = std::move(ds_layout);
     descriptor_pool_ = std::move(ds_pool);
     descriptor_set_ = std::move(ds_set);
-    for (int i = 0; i < 4; ++i) {
-        dsb.WriteBuffer(*descriptor_set_, i, *scalar_field_buffer_);
-    }
+    dsb.WriteBuffer(*descriptor_set_, 0, *scalar_field_buffer_);
+    dsb.WriteBuffer(*descriptor_set_,1, *velocity_buffers_[0]);
+    dsb.WriteBuffer(*descriptor_set_,2, *velocity_buffers_[2]);
+    dsb.WriteBuffer(*descriptor_set_,3, *velocity_buffers_[1]);
 }
 
 void ComputeContext::CreateComputePipeline() {
