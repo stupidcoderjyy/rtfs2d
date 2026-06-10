@@ -1,0 +1,54 @@
+#version 450
+
+// 一维工作组大小：128 个线程
+layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+
+// 网格常量（与其它着色器保持一致）
+const uint NX = 128u;
+const uint NY = 128u;
+const float DX = 1.0f / float(NX);   // 网格间距
+
+// 缓冲区绑定
+// binding 0：压力场（只读）
+layout(std430, binding = 0) buffer PressureBuffer {
+    float data[];
+} p;
+
+// binding 2：速度场 u 分量（读写）
+layout(std430, binding = 2) buffer UBuffer {
+    float data[];
+} u;
+
+// binding 3：速度场 v 分量（读写）
+layout(std430, binding = 3) buffer VBuffer {
+    float data[];
+} v;
+
+// 辅助函数：安全获取压力值，越界返回 0.0
+float getPressure(int i, int j) {
+    if (i < 0 || i >= int(NX) || j < 0 || j >= int(NY)) {
+        return 0.0f;
+    }
+    uint idx = uint(i) + uint(j) * NX;
+    return p.data[idx];
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= NX * NY) return;
+
+    uint i = idx % NX;
+    uint j = idx / NX;
+
+    // 获取左右邻居压力值
+    float p_left  = getPressure(int(i) - 1, int(j));
+    float p_right = getPressure(int(i) + 1, int(j));
+    // 获取上下邻居压力值
+    float p_bottom = getPressure(int(i), int(j) - 1);
+    float p_top    = getPressure(int(i), int(j) + 1);
+
+    // 压力梯度修正速度（使速度场变为无散）
+    float inv_2dx = 1.0f / (2.0f * DX);
+    u.data[idx] -= (p_right - p_left) * inv_2dx;
+    v.data[idx] -= (p_top - p_bottom) * inv_2dx;
+}

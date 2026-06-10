@@ -9,6 +9,8 @@ add_library(${TARGET} STATIC
         grid.h
         jacobi_solver.cpp
         jacobi_solver.h
+        projection_solver.cpp
+        projection_solver.h
         vk_compute.cpp
         vk_compute.h
         vk_descriptor.cpp
