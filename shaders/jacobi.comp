@@ -1,0 +1,62 @@
+#version 450
+
+// 工作组大小：128 个线程一维布局，每个线程处理一个网格单元
+layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+
+// 网格尺寸（与 advection.comp 保持一致）
+const uint NX = 128u;
+const uint NY = 128u;
+
+// 缓冲区绑定
+// binding 0：当前场（上一次迭代的解，用于读取邻居）
+layout(std430, binding = 0) buffer CurrentField {
+    float data[];
+} cur;
+
+// binding 1：源项场（常数项 b）
+layout(std430, binding = 1) buffer SourceField {
+    float data[];
+} src;
+
+// binding 3：新场（本次迭代的结果）
+layout(std430, binding = 3) buffer NewField {
+    float data[];
+} newF;
+
+// Push Constants 传递系数
+layout(push_constant) uniform Params {
+    float alpha;   // 源项乘数
+    float beta;    // 分母
+} pc;
+
+// 获取邻居值的辅助函数（越界返回 0.0）
+float getNeighbor(int i, int j) {
+    if (i < 0 || i >= int(NX) || j < 0 || j >= int(NY)) {
+        return 0.0f;
+    }
+    uint idx = uint(i) + uint(j) * NX;
+    return cur.data[idx];
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= NX * NY) return;
+
+    uint i = idx % NX;
+    uint j = idx / NX;
+
+    // 读取四个邻居（上、下、左、右）
+    float left   = getNeighbor(int(i) - 1, int(j));
+    float right  = getNeighbor(int(i) + 1, int(j));
+    float bottom = getNeighbor(int(i), int(j) - 1);
+    float top    = getNeighbor(int(i), int(j) + 1);
+
+    // 读取源项 b
+    float b = src.data[idx];
+
+    // 雅可比迭代公式
+    float newVal = (left + right + bottom + top + pc.alpha * b) / pc.beta;
+
+    // 写入新场
+    newF.data[idx] = newVal;
+}

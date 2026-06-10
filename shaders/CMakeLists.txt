@@ -5,6 +5,7 @@ set(SHADER_SOURCES
         compute.comp
         fullscreen.frag
         fullscreen.vert
+        jacobi.comp
 )
 
 find_program(GLSLC glslc HINTS "${LIB_PREFIX_PATH}/bin")
