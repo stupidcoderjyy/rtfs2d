@@ -15,7 +15,8 @@ class ComputeContext;
 class JacobiSolver {
 public:
     JacobiSolver(DeviceManager& dm, ComputeContext& cc);
-    void RecordCommands(const vk::raii::CommandBuffer& cb, float alpha, float beta) const;
+    void RecordCommands(const vk::raii::CommandBuffer& cb,
+        const vk::raii::DescriptorSet& ds, float alpha, float beta) const;
 private:
     DeviceManager* dm_;
     ComputeContext* cc_;

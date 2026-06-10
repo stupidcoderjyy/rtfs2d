@@ -45,7 +45,7 @@ void GraphicsContext::RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t
         {}, nullptr, nullptr, barrier);
 
     // 开始渲染通道，清除颜色为黑色
-    vk::ClearValue clear_value{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}};
+    vk::ClearValue clear_value{std::array{0.0f, 0.0f, 0.0f, 1.0f}};
     vk::RenderPassBeginInfo bi{};
     bi.setRenderPass(sc_->render_pass())
         .setFramebuffer(*sc_->framebuffers()[img_idx])
@@ -68,7 +68,8 @@ void GraphicsContext::RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t
 
     // 将存储缓冲绑定到图形管线
     cb.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-        **graphics_pipeline_layout_, 0, *cc_->descriptor_set(), nullptr);
+        **graphics_pipeline_layout_, 0,
+        *cc_->DescriptorSetAt(ComputeContext::kSetProjection), nullptr);
 
     // 绘制全屏三角形（3个顶点）
     cb.draw(3, 1, 0, 0);

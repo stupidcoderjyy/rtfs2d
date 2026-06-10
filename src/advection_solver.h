@@ -15,7 +15,7 @@ class ComputeContext;
 class AdvectionSolver {
 public:
     AdvectionSolver(DeviceManager& dm, ComputeContext& cc);
-    void RecordCommands(const vk::raii::CommandBuffer& cb) const;
+    void RecordCommands(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
 private:
     DeviceManager* dm_;
     ComputeContext* cc_;

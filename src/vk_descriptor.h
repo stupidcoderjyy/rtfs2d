@@ -15,12 +15,13 @@ public:
 
     DescriptorSetBuilder& AddStorageBufferBinding(uint32_t binding, vk::ShaderStageFlags stages);
 
-    using BuildResult = std::tuple<
-        std::unique_ptr<vk::raii::DescriptorSetLayout>,
-        std::unique_ptr<vk::raii::DescriptorPool>,
-        std::unique_ptr<vk::raii::DescriptorSet>>;
+    struct BuildResult {
+        std::unique_ptr<vk::raii::DescriptorSetLayout> layout;
+        std::unique_ptr<vk::raii::DescriptorPool> pool;
+        std::vector<std::unique_ptr<vk::raii::DescriptorSet>> sets;
+    };
 
-    BuildResult build() const;
+    BuildResult build(uint32_t max_sets = 1) const;
 
     void WriteBuffer(
         const vk::raii::DescriptorSet& set,

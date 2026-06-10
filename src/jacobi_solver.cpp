@@ -23,23 +23,13 @@ JacobiSolver::JacobiSolver(DeviceManager &dm, ComputeContext &cc): dm_(&dm), cc_
         *pipeline_layout_, "shaders/jacobi.comp.spv");
 }
 
-void JacobiSolver::RecordCommands(const vk::raii::CommandBuffer &cb, float alpha, float beta) const {
+void JacobiSolver::RecordCommands(const vk::raii::CommandBuffer &cb,
+        const vk::raii::DescriptorSet &ds, float alpha, float beta) const {
     cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_);
     cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, **pipeline_layout_,
-        0, *cc_->descriptor_set(), nullptr);
+        0, *ds, nullptr);
     int group_count = (cc_->cell_count() + 127) / 128;
     cb.pushConstants<float>(**pipeline_layout_,
         vk::ShaderStageFlagBits::eCompute, 0, {alpha, beta});
     cb.dispatch(group_count, 1, 1);
-    vk::BufferMemoryBarrier barrier{};
-    barrier.setSrcAccessMask(vk::AccessFlagBits::eShaderWrite)
-        .setDstAccessMask(vk::AccessFlagBits::eShaderRead)
-        .setBuffer(*cc_->VelocityBuffer(ComputeContext::eUDst))
-        .setSize(cc_->buf_size())
-        .setOffset(0)
-        .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-        .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
-    cb.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
-        vk::PipelineStageFlagBits::eComputeShader,
-        {}, nullptr, barrier, nullptr);
 }

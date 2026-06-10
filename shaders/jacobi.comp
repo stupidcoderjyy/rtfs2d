@@ -30,9 +30,9 @@ layout(push_constant) uniform Params {
 } pc;
 
 // 获取邻居值的辅助函数（越界返回 0.0）
-float getNeighbor(int i, int j) {
+float getNeighbor(int i, int j, uint idx_self) {
     if (i < 0 || i >= int(NX) || j < 0 || j >= int(NY)) {
-        return 0.0f;
+        return cur.data[idx_self];
     }
     uint idx = uint(i) + uint(j) * NX;
     return cur.data[idx];
@@ -40,16 +40,17 @@ float getNeighbor(int i, int j) {
 
 void main() {
     uint idx = gl_GlobalInvocationID.x;
+
     if (idx >= NX * NY) return;
 
     uint i = idx % NX;
     uint j = idx / NX;
 
     // 读取四个邻居（上、下、左、右）
-    float left   = getNeighbor(int(i) - 1, int(j));
-    float right  = getNeighbor(int(i) + 1, int(j));
-    float bottom = getNeighbor(int(i), int(j) - 1);
-    float top    = getNeighbor(int(i), int(j) + 1);
+    float left   = getNeighbor(int(i) - 1, int(j), idx);
+    float right  = getNeighbor(int(i) + 1, int(j), idx);
+    float bottom = getNeighbor(int(i), int(j) - 1, idx);
+    float top    = getNeighbor(int(i), int(j) + 1, idx);
 
     // 读取源项 b
     float b = src.data[idx];

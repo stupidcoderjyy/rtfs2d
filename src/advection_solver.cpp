@@ -13,21 +13,11 @@ AdvectionSolver::AdvectionSolver(DeviceManager &dm, ComputeContext &cc): dm_(&dm
         cc.pipeline_layout(), "shaders/advection.comp.spv");
 }
 
-void AdvectionSolver::RecordCommands(const vk::raii::CommandBuffer &cb) const {
+void AdvectionSolver::RecordCommands(const vk::raii::CommandBuffer &cb,
+        const vk::raii::DescriptorSet& ds) const {
     cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_);
     cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *cc_->pipeline_layout(),
-        0, *cc_->descriptor_set(), nullptr);
+        0, *ds, nullptr);
     int group_count = (cc_->cell_count() + 127) / 128;
     cb.dispatch(group_count, 1, 1);
-    vk::BufferMemoryBarrier barrier{};
-    barrier.setSrcAccessMask(vk::AccessFlagBits::eShaderWrite)
-        .setDstAccessMask(vk::AccessFlagBits::eShaderRead)
-        .setBuffer(*cc_->VelocityBuffer(ComputeContext::eUSrc))
-        .setSize(cc_->buf_size())
-        .setOffset(0)
-        .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-        .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
-    cb.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
-        vk::PipelineStageFlagBits::eComputeShader,
-        {}, nullptr, barrier, nullptr);
 }

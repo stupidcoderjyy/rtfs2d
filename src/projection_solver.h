@@ -15,12 +15,11 @@ class ComputeContext;
 class ProjectionSolver {
 public:
     ProjectionSolver(DeviceManager& dm, ComputeContext& cc);
-    void RecordCommands(const vk::raii::CommandBuffer& cb) const;
+    void RecordCommands(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
 private:
     DeviceManager* dm_;
     ComputeContext* cc_;
     std::unique_ptr<vk::raii::Pipeline> pipeline_;
-
 };
 }
 
