@@ -3,6 +3,8 @@
 add_library(${TARGET} STATIC
         advection_solver.cpp
         advection_solver.h
+        divergence_solver.cpp
+        divergence_solver.h
         grid.cpp
         grid.h
         jacobi_solver.cpp

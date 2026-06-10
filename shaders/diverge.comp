@@ -1,0 +1,64 @@
+#version 450
+
+// 一维工作组大小：128 个线程
+layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+
+// 网格常量（与 advection.comp 保持一致）
+const uint NX = 128u;
+const uint NY = 128u;
+const float DX = 1.0f / float(NX);   // 网格间距
+
+// 缓冲区绑定
+// binding 1：散度输出（用于压力泊松方程的源项）
+layout(std430, binding = 1) buffer DivBuffer {
+    float data[];
+} div;
+
+// binding 2：速度场 u 分量（水平速度）
+layout(std430, binding = 2) buffer UBuffer {
+    float data[];
+} u;
+
+// binding 3：速度场 v 分量（垂直速度）
+layout(std430, binding = 3) buffer VBuffer {
+    float data[];
+} v;
+
+// 辅助函数：安全获取 u 值，越界返回 0.0
+float getU(int i, int j) {
+    if (i < 0 || i >= int(NX) || j < 0 || j >= int(NY)) {
+        return 0.0f;
+    }
+    uint idx = uint(i) + uint(j) * NX;
+    return u.data[idx];
+}
+
+// 辅助函数：安全获取 v 值，越界返回 0.0
+float getV(int i, int j) {
+    if (i < 0 || i >= int(NX) || j < 0 || j >= int(NY)) {
+        return 0.0f;
+    }
+    uint idx = uint(i) + uint(j) * NX;
+    return v.data[idx];
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= NX * NY) return;
+
+    uint i = idx % NX;
+    uint j = idx / NX;
+
+    // 获取左右邻居的 u 值
+    float u_left  = getU(int(i) - 1, int(j));
+    float u_right = getU(int(i) + 1, int(j));
+
+    // 获取上下邻居的 v 值
+    float v_bottom = getV(int(i), int(j) - 1);
+    float v_top    = getV(int(i), int(j) + 1);
+
+    // 中心差分计算散度： du/dx + dv/dy
+    float div_val = (u_right - u_left) / (2.0f * DX) + (v_top - v_bottom) / (2.0f * DX);
+
+    div.data[idx] = div_val;
+}

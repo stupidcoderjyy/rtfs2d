@@ -3,6 +3,7 @@ set(TARGET rtfs2d_shaders)
 set(SHADER_SOURCES
         advection.comp
         compute.comp
+        diverge.comp
         fullscreen.frag
         fullscreen.vert
         jacobi.comp
