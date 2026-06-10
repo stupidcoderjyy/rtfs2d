@@ -1,0 +1,72 @@
+#version 450
+
+// 工作组大小：128 个线程在 X 方向（一维布局）
+layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+
+const uint NX = 128u;
+const uint NY = 128u;
+const float DT = 0.016f;
+const float DX = 1.0f / float(NX);
+
+// 源场 (uSrc或vSrc)
+layout(std430, binding = 0) buffer SrcBuffer {
+    float data[];
+} src;
+
+// 目标场 (uDst或vDst)
+layout(std430, binding = 1) buffer DstBuffer {
+    float data[];
+} dst;
+
+layout(std430, binding = 2) buffer VelocityuSrcfer {
+    float data[];
+} uSrc;
+
+layout(std430, binding = 3) buffer VelocityvSrcfer {
+    float data[];
+} vSrc;
+
+float sampleBilinear(float x, float y) {
+    uint ix0 = uint(clamp(floor(x), 0.0f, float(NX) - 1.0f));
+    uint ix1 = uint(clamp(ceil(x),  0.0f, float(NX) - 1.0f));
+    uint iy0 = uint(clamp(floor(y), 0.0f, float(NY) - 1.0f));
+    uint iy1 = uint(clamp(ceil(y),  0.0f, float(NY) - 1.0f));
+
+    float v00 = src.data[ix0 + iy0 * NX];
+    float v10 = src.data[ix1 + iy0 * NX];
+    float v01 = src.data[ix0 + iy1 * NX];
+    float v11 = src.data[ix1 + iy1 * NX];
+
+    float tx = x - floor(x);
+    float ty = y - floor(y);
+
+    float v0 = mix(v00, v10, tx);
+    float v1 = mix(v01, v11, tx);
+    return mix(v0, v1, ty);
+}
+
+void main() {
+    // 一维全局索引映射到二维网格 (i, j)
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= NX * NY) return;   // 边界保护
+
+    uint i = idx % NX;
+    uint j = idx / NX;
+
+    uint base = i + j * NX;
+    float u = uSrc.data[base];
+    float v = vSrc.data[base];
+
+    // 反向追踪
+    float bx = float(i) + 0.5f - u * DT / DX;
+    float by = float(j) + 0.5f - v * DT / DX;
+
+    bx = clamp(bx, 0.5f, float(NX) - 0.5f);
+    by = clamp(by, 0.5f, float(NY) - 0.5f);
+
+    float sx = bx - 0.5f;
+    float sy = by - 0.5f;
+
+    float result = sampleBilinear(sx, sy);
+    dst.data[base] = result;
+}

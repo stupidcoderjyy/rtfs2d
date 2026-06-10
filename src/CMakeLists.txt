@@ -1,6 +1,8 @@
 ﻿set(TARGET rtfs2d_core)
 
 add_library(${TARGET} STATIC
+        advection_solver.cpp
+        advection_solver.h
         grid.cpp
         grid.h
         vk_compute.cpp

@@ -18,6 +18,20 @@ public:
     void RecordAndSubmit(const vk::raii::Queue& queue);
     void Verify() const;
 
+    enum VelocityBufferIndex {
+        eUSrc = 0,  //当前时间步速度u分量，平流/雅可比迭代的输入
+        eUDst = 1,  //速度u分量的计算结果
+        eVSrc = 2,  //当前时间步速度v分量
+        eVDst = 3   //速度v分量的计算结果
+    };
+
+    const vk::raii::Buffer& VelocityBuffer(VelocityBufferIndex idx) const {
+        return *velocity_buffers_[static_cast<int>(idx)];
+    }
+    const vk::raii::DeviceMemory& VelocityMemory(VelocityBufferIndex idx) const {
+        return *velocity_memories_[static_cast<int>(idx)];
+    }
+
     // getter
     const vk::raii::Buffer& scalar_field_buffer() const { return *scalar_field_buffer_; }
     const vk::raii::DescriptorSetLayout& descriptor_set_layout() const { return *descriptor_set_layout_; }
@@ -25,7 +39,7 @@ public:
     const GridParams& grid_params() const { return grid_params_; }
     int cell_count() const { return compute_cell_count_; }
     vk::DeviceSize buf_size() const { return compute_buf_size_; }
-
+    const vk::raii::PipelineLayout& pipeline_layout() const { return *pipeline_layout_; }
 private:
     DeviceManager* dm_;
 

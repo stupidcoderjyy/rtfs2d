@@ -60,10 +60,11 @@ void ComputeContext::CreateDescriptorSets() {
     descriptor_set_layout_ = std::move(ds_layout);
     descriptor_pool_ = std::move(ds_pool);
     descriptor_set_ = std::move(ds_set);
+    // 1和2最终会动态绑定到u和v，现在只是占位
     dsb.WriteBuffer(*descriptor_set_, 0, *scalar_field_buffer_);
-    dsb.WriteBuffer(*descriptor_set_,1, *velocity_buffers_[0]);
-    dsb.WriteBuffer(*descriptor_set_,2, *velocity_buffers_[2]);
-    dsb.WriteBuffer(*descriptor_set_,3, *velocity_buffers_[1]);
+    dsb.WriteBuffer(*descriptor_set_,1, VelocityBuffer(eUDst));
+    dsb.WriteBuffer(*descriptor_set_,2, VelocityBuffer(eUSrc));
+    dsb.WriteBuffer(*descriptor_set_,3, VelocityBuffer(eVSrc));
 }
 
 void ComputeContext::CreateComputePipeline() {
