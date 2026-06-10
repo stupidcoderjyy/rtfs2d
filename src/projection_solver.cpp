@@ -14,7 +14,6 @@ ProjectionSolver::ProjectionSolver(DeviceManager &dm, ComputeContext &cc): dm_(&
 }
 
 void ProjectionSolver::RecordCommands(const vk::raii::CommandBuffer &cb) const {
-    cb.begin({vk::CommandBufferUsageFlagBits::eSimultaneousUse});
     cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_);
     cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *cc_->pipeline_layout(),
         0, *cc_->descriptor_set(), nullptr);
@@ -31,5 +30,4 @@ void ProjectionSolver::RecordCommands(const vk::raii::CommandBuffer &cb) const {
     cb.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
         vk::PipelineStageFlagBits::eComputeShader,
         {}, nullptr, barrier, nullptr);
-    cb.end();
 }

@@ -19,6 +19,26 @@ ComputeContext::ComputeContext(DeviceManager& dm): dm_(&dm) {
     CreateDescriptorSets();
     CreateComputePipeline();
     RecordComputeCommands();
+    advection_solver_ = std::make_unique<AdvectionSolver>(dm, *this);
+    jacobi_solver_ = std::make_unique<JacobiSolver>(dm, *this);
+    divergence_solver_ = std::make_unique<DivergenceSolver>(dm, *this);
+    projection_solver_ = std::make_unique<ProjectionSolver>(dm, *this);
+}
+
+void ComputeContext::RecordAndSubmit(const vk::raii::Queue& queue) {
+    vk::CommandBufferAllocateInfo ai{};
+    ai.setCommandPool(dm_->compute_command_pool())
+        .setCommandBufferCount(1)
+        .setLevel(vk::CommandBufferLevel::ePrimary);
+    auto cbs = dm_->device().allocateCommandBuffers(ai);
+    auto& cb = cbs[0];
+    // 录制模拟任务
+    RecordFluidStepCommands(cb);
+    // 提交与等待
+    vk::SubmitInfo si{};
+    si.setCommandBuffers(*cb);
+    queue.submit(si);
+    queue.waitIdle();
 }
 
 void ComputeContext::CreateStorageBuffer() {
@@ -104,68 +124,71 @@ void ComputeContext::RecordComputeCommands() {
     cb.end();
 }
 
-void ComputeContext::RecordAndSubmit(const vk::raii::Queue& queue) {
-    vk::SubmitInfo c_si{};
-    c_si.setCommandBuffers(**compute_command_buffer_);
-    queue.submit(c_si);
-    queue.waitIdle();
-    if (!verified_) {
-        Verify();
-        verified_ = true;
-    }
+// 将输出场设置为输入场
+void ComputeContext::SwapVelocityBuffers() {
+    std::swap(velocity_buffers_[eUSrc], velocity_buffers_[eUDst]);
+    std::swap(velocity_memories_[eUSrc], velocity_memories_[eUDst]);
+    std::swap(velocity_buffers_[eVSrc], velocity_buffers_[eVDst]);
+    std::swap(velocity_memories_[eVSrc], velocity_memories_[eVDst]);
+    DescriptorSetBuilder dsb(dm_->device());
+    dsb.WriteBuffer(*descriptor_set_,1, VelocityBuffer(eUDst));
+    dsb.WriteBuffer(*descriptor_set_,2, VelocityBuffer(eUSrc));
+    dsb.WriteBuffer(*descriptor_set_,3, VelocityBuffer(eVSrc));
 }
 
-void ComputeContext::Verify() const {
-    vk::BufferCreateInfo ci{};
-    ci.setSize(compute_buf_size_)
-        .setUsage(vk::BufferUsageFlagBits::eTransferDst)
-        .setSharingMode(vk::SharingMode::eExclusive);
-    auto staging_buf = dm_->device().createBuffer(ci);
+void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) {
+    cb.begin({vk::CommandBufferUsageFlagBits::eSimultaneousUse});
+    DescriptorSetBuilder dsb(dm_->device());
 
-    auto mr = staging_buf.getMemoryRequirements();
-    auto mti = FindMemoryType(dm_->physical_device(), mr.memoryTypeBits,
-        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-    vk::MemoryAllocateInfo m_ai{};
-    m_ai.setAllocationSize(mr.size)
-        .setMemoryTypeIndex(mti);
-    auto staging_mem = dm_->device().allocateMemory(m_ai);
-    staging_buf.bindMemory(*staging_mem, 0);
+    // 平流u分量 u_src, u_src -> u_dst
+    dsb.WriteBuffer(*descriptor_set_, 0, VelocityBuffer(eUSrc));
+    dsb.WriteBuffer(*descriptor_set_, 1, VelocityBuffer(eUDst));
+    advection_solver_->RecordCommands(cb);
+    SwapVelocityBuffers();
 
-    vk::CommandBufferAllocateInfo ai{};
-    ai.setCommandPool(dm_->compute_command_pool())
-        .setCommandBufferCount(1)
-        .setLevel(vk::CommandBufferLevel::ePrimary);
-    auto cbs = dm_->device().allocateCommandBuffers(ai);
-    auto& cb = cbs.front();
-    cb.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-    vk::BufferCopy copy{};
-    copy.setSrcOffset(0)
-        .setSize(compute_buf_size_);
-    cb.copyBuffer(**scalar_field_buffer_, *staging_buf, copy);
+    // 平流v分量 u_src, v_src -> v_dst
+    dsb.WriteBuffer(*descriptor_set_, 0, VelocityBuffer(eVSrc));
+    dsb.WriteBuffer(*descriptor_set_, 1, VelocityBuffer(eVDst));
+    advection_solver_->RecordCommands(cb);
+    SwapVelocityBuffers();
+
+    // 扩散迭代（u 和 v 各做一次雅可比迭代）
+    float viscosity = 0.0f;
+    float dx = grid_params_.dx;
+    float alpha = viscosity * 0.016f / (dx * dx);
+    float beta = 4.0f + alpha;
+    for (int iter = 0; iter < 20; ++iter) {
+        // u_src -> u_dst
+        dsb.WriteBuffer(*descriptor_set_, 0, VelocityBuffer(eUSrc));
+        dsb.WriteBuffer(*descriptor_set_, 1, VelocityBuffer(eUSrc));
+        dsb.WriteBuffer(*descriptor_set_, 3, VelocityBuffer(eUDst));
+        jacobi_solver_->RecordCommands(cb, alpha, beta);
+        SwapVelocityBuffers();
+
+        // v_src -> v_dst
+        dsb.WriteBuffer(*descriptor_set_, 0, VelocityBuffer(eVSrc));
+        dsb.WriteBuffer(*descriptor_set_, 1, VelocityBuffer(eVSrc));
+        dsb.WriteBuffer(*descriptor_set_, 3, VelocityBuffer(eVDst));
+        jacobi_solver_->RecordCommands(cb, alpha, beta);
+        SwapVelocityBuffers();
+    }
+
+    // 散度计算 u_src, v_src -> u_dst
+    dsb.WriteBuffer(*descriptor_set_, 1, VelocityBuffer(eUDst));
+    divergence_solver_->RecordCommands(cb);
+
+    // 压力求解迭代（雅可比迭代解泊松方程） scalar_field_buffer_, u_dst(上一步算的散度) -> scalar_field_buffer_
+    float alpha_p = -(dx * dx);
+    dsb.WriteBuffer(*descriptor_set_, 0, *scalar_field_buffer_);
+    dsb.WriteBuffer(*descriptor_set_, 1, VelocityBuffer(eUDst));
+    dsb.WriteBuffer(*descriptor_set_, 3, *scalar_field_buffer_);
+    for (int iter = 0; iter < 40; ++iter) {
+        float beta_p = 4.0f;
+        jacobi_solver_->RecordCommands(cb, alpha_p, beta_p);
+    }
+
+    // 压力投影
+    dsb.WriteBuffer(*descriptor_set_, 0, *scalar_field_buffer_);
+    projection_solver_->RecordCommands(cb);
     cb.end();
-
-    vk::SubmitInfo si{};
-    si.setCommandBuffers(*cb);
-    dm_->graphics_queue().submit(si);
-    dm_->graphics_queue().waitIdle();
-
-    auto* p_res = static_cast<float*>(staging_mem.mapMemory(0, compute_buf_size_));
-    bool pass = true;
-    for (int k = 0; k < compute_cell_count_; ++k) {
-        int i = k % grid_params_.nx, j = k / grid_params_.nx;
-        float fx = static_cast<float>(i) / static_cast<float>(grid_params_.nx);
-        float fy = static_cast<float>(j) / static_cast<float>(grid_params_.ny);
-        float r = std::sqrt((fx - 0.5f) * (fx - 0.5f) + (fy - 0.5f) * (fy - 0.5f)) * 2.0f;
-        float expected = std::sin(r * 20.0f) * 0.5f + 0.5f;
-        if (float delta = std::abs(p_res[k] - expected); delta > 1e-5f) {
-            spdlog::warn("Value mismatch at ({}, {}), expected: {}, actual: {}",
-                i, j, expected, p_res[k]);
-            pass = false;
-            break;
-        }
-    }
-    if (pass) {
-        spdlog::info("All values match within tolerance");
-    }
-    staging_mem.unmapMemory();
 }

@@ -7,6 +7,10 @@
 
 #include <vulkan/vulkan_raii.hpp>
 #include "grid.h"
+#include "jacobi_solver.h"
+#include "advection_solver.h"
+#include "divergence_solver.h"
+#include "projection_solver.h"
 
 namespace rtfs2d {
 
@@ -16,7 +20,6 @@ class ComputeContext {
 public:
     explicit ComputeContext(DeviceManager& dm);
     void RecordAndSubmit(const vk::raii::Queue& queue);
-    void Verify() const;
 
     enum VelocityBufferIndex {
         eUSrc = 0,  //当前时间步速度u分量，平流/雅可比迭代的输入
@@ -54,7 +57,12 @@ private:
     std::unique_ptr<vk::raii::DescriptorPool> descriptor_pool_;
     std::unique_ptr<vk::raii::DescriptorSet> descriptor_set_;
     std::unique_ptr<vk::raii::CommandBuffer> compute_command_buffer_;
-    bool verified_ = false;
+
+    std::unique_ptr<AdvectionSolver> advection_solver_;
+    std::unique_ptr<JacobiSolver> jacobi_solver_;
+    std::unique_ptr<DivergenceSolver> divergence_solver_;
+    std::unique_ptr<ProjectionSolver> projection_solver_;
+
     const GridParams grid_params_{128, 128, 1.0f, 1.0f};
     const int compute_cell_count_ = grid_params_.TotalCells();
     const vk::DeviceSize compute_buf_size_ = compute_cell_count_ * sizeof(float);
@@ -64,6 +72,9 @@ private:
     void CreateDescriptorSets();
     void CreateComputePipeline();
     void RecordComputeCommands();
+
+    void SwapVelocityBuffers();
+    void RecordFluidStepCommands(const vk::raii::CommandBuffer& cb);
 };
 
 }

@@ -24,7 +24,6 @@ JacobiSolver::JacobiSolver(DeviceManager &dm, ComputeContext &cc): dm_(&dm), cc_
 }
 
 void JacobiSolver::RecordCommands(const vk::raii::CommandBuffer &cb, float alpha, float beta) const {
-    cb.begin({vk::CommandBufferUsageFlagBits::eSimultaneousUse});
     cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_);
     cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, **pipeline_layout_,
         0, *cc_->descriptor_set(), nullptr);
@@ -43,5 +42,4 @@ void JacobiSolver::RecordCommands(const vk::raii::CommandBuffer &cb, float alpha
     cb.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
         vk::PipelineStageFlagBits::eComputeShader,
         {}, nullptr, barrier, nullptr);
-    cb.end();
 }
