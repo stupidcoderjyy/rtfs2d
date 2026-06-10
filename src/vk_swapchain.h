@@ -62,9 +62,8 @@ public:
         return image_layouts_;
     }
 
-    std::pair<vk::Result, uint32_t> AcquireImage(const vk::raii::Semaphore& sem) const {
-        auto [res, img_idx] = swapchain_->acquireNextImage(UINT64_MAX,*sem);
-        return {res, img_idx};
+    vk::ResultValue<uint32_t> AcquireImage(const vk::raii::Semaphore& sem) const {
+        return swapchain_->acquireNextImage(UINT64_MAX,*sem);
     }
 
     bool needs_recreate() const {

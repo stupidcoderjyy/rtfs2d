@@ -35,12 +35,16 @@ void ComputeContext::CreateStorageBuffer() {
 
 void ComputeContext::CreateDescriptorSets() {
     DescriptorSetBuilder dsb(dm_->device());
-    dsb.AddStorageBufferBinding(0, vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eFragment);
+    for (int i = 0; i < 4; ++i) {
+        dsb.AddStorageBufferBinding(i, vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eFragment);
+    }
     auto [ds_layout, ds_pool, ds_set] = dsb.build();
     descriptor_set_layout_ = std::move(ds_layout);
     descriptor_pool_ = std::move(ds_pool);
     descriptor_set_ = std::move(ds_set);
-    dsb.WriteBuffer(*descriptor_set_, 0, *scalar_field_buffer_);
+    for (int i = 0; i < 4; ++i) {
+        dsb.WriteBuffer(*descriptor_set_, i, *scalar_field_buffer_);
+    }
 }
 
 void ComputeContext::CreateComputePipeline() {

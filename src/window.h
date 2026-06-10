@@ -5,10 +5,8 @@
 #ifndef RTFS2D_WINDOW_H
 #define RTFS2D_WINDOW_H
 #include <string>
-#include <vulkan/vulkan_raii.hpp>
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
-#include <grid.h>
 #include "vk_swapchain.h"
 #include "vk_device.h"
 #include "vk_compute.h"
