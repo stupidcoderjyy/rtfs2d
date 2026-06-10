@@ -7,7 +7,6 @@
 #include <array>
 #include <fstream>
 #include <spdlog/spdlog.h>
-#include <stdexcept>
 #include <vector>
 
 #include "vk_device.h"
