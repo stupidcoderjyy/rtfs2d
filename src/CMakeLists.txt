@@ -9,6 +9,8 @@ add_library(${TARGET} STATIC
         grid.h
         jacobi_solver.cpp
         jacobi_solver.h
+        pressure_bc_solver.cpp
+        pressure_bc_solver.h
         projection_solver.cpp
         projection_solver.h
         vk_boundary.cpp
@@ -27,6 +29,8 @@ add_library(${TARGET} STATIC
         vk_memory.h
         vk_swapchain.cpp
         vk_swapchain.h
+        vorticity_solver.cpp
+        vorticity_solver.h
         window.cpp
         window.h
 )

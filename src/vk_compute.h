@@ -11,6 +11,9 @@
 #include "advection_solver.h"
 #include "divergence_solver.h"
 #include "projection_solver.h"
+#include "vorticity_solver.h"
+#include "pressure_bc_solver.h"
+#include "vk_boundary.h"
 
 namespace rtfs2d {
 
@@ -31,7 +34,9 @@ public:
         kSetDivergence = 6,          // 散度计算
         kSetPressureEven = 7,        // 压力求解偶次迭代
         kSetPressureOdd = 8,         // 压力求解奇次迭代
-        kSetProjection = 9           // 压力投影修正速度
+        kSetProjection = 9,          // 压力投影修正速度
+        kSetVorticity = 10,          // 涡量约束
+        kSetPressureBc = 11
     };
 
     void AddBufferMemoryWriteReadBarrier(const vk::raii::CommandBuffer& cb, int buf) const;
@@ -52,10 +57,11 @@ public:
     int cell_count() const { return compute_cell_count_; }
     vk::DeviceSize buf_size() const { return compute_buf_size_; }
     const vk::raii::PipelineLayout& pipeline_layout() const { return *pipeline_layout_; }
+    BoundaryContext& boundary_ctx() const { return *boundary_ctx_; }
 private:
     DeviceManager* dm_;
     // { u_src, u_dst, v_src, v_dst }
-    static constexpr int kBindingsSize = 5;
+    static constexpr int kBindingsSize = 8;
     std::vector<std::unique_ptr<vk::raii::Buffer>> velocity_buffers_;
     std::vector<std::unique_ptr<vk::raii::DeviceMemory>> velocity_memories_;
     std::unique_ptr<vk::raii::DescriptorSetLayout> descriptor_set_layout_;
@@ -66,9 +72,12 @@ private:
     std::unique_ptr<JacobiSolver> jacobi_solver_;
     std::unique_ptr<DivergenceSolver> divergence_solver_;
     std::unique_ptr<ProjectionSolver> projection_solver_;
+    std::unique_ptr<VorticitySolver> vorticity_solver_;
+    std::unique_ptr<PressureBCSolver> pressure_bc_solver_;
     const GridParams grid_params_{128, 128, 1.0f, 1.0f};
     const int compute_cell_count_ = grid_params_.TotalCells();
     const vk::DeviceSize compute_buf_size_ = compute_cell_count_ * sizeof(float);
+    std::unique_ptr<BoundaryContext> boundary_ctx_;
 
     void CreateVelocityBuffers();
     void CreateDescriptorSets();

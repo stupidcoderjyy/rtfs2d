@@ -35,14 +35,13 @@ float getPressure(int i, int j, uint self_idx) {
 
     uint offset = (dir == 0) ? LEFT_START : (dir == 2) ? RIGHT_START : (dir == 1) ? TOP_START : BOTTOM_START;
     int t = bc_type.data[offset + local];
-    return p.data[self_idx];
-//    if (t == 1) {               // NoSlipWall → Neumann: 取内部值
-//        return p.data[self_idx];
-//    } else if (t == 4 || t == 5) { // PressureInlet/Outlet → Dirichlet: 0.0
-//        return 0.0f;
-//    } else {
-//        return 0.0f;
-//    }
+    if (t == 1) {               // NoSlipWall → Neumann: 取内部值
+        return p.data[self_idx];
+    } else if (t == 4 || t == 5) { // PressureInlet/Outlet → Dirichlet: 0.0
+        return 0.0f;
+    } else {
+        return 0.0f;
+    }
 }
 
 void main() {

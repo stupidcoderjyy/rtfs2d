@@ -1,0 +1,113 @@
+#version 450
+
+layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+
+const uint NX = 128u;
+const uint NY = 128u;
+const float DT = 0.016f;
+const float DX = 1.0f / float(NX);
+
+// 边界缓冲区偏移常量
+const uint TOP_START    = 0u;
+const uint BOTTOM_START = NX;
+const uint LEFT_START   = 2u * NX;
+const uint RIGHT_START  = 2u * NX + NY;
+
+layout(std430, binding = 0) buffer SrcBuffer { float data[]; } src;
+layout(std430, binding = 1) buffer DstBuffer { float data[]; } dst;
+layout(std430, binding = 2) buffer VelocityuSrcfer { float data[]; } uSrc;
+layout(std430, binding = 3) buffer VelocityvSrcfer { float data[]; } vSrc;
+// 边界条件拼接缓冲
+layout(std430, binding = 5) buffer BCType  { int data[]; } bc_type;
+layout(std430, binding = 6) buffer BCVelU  { float data[]; } bc_vel_u;
+layout(std430, binding = 7) buffer BCVelV  { float data[]; } bc_vel_v;
+
+float sampleBilinear(float x, float y) {
+    uint ix0 = uint(clamp(floor(x), 0.0f, float(NX) - 1.0f));
+    uint ix1 = uint(clamp(ceil(x),  0.0f, float(NX) - 1.0f));
+    uint iy0 = uint(clamp(floor(y), 0.0f, float(NY) - 1.0f));
+    uint iy1 = uint(clamp(ceil(y),  0.0f, float(NY) - 1.0f));
+
+    float v00 = src.data[ix0 + iy0 * NX];
+    float v10 = src.data[ix1 + iy0 * NX];
+    float v01 = src.data[ix0 + iy1 * NX];
+    float v11 = src.data[ix1 + iy1 * NX];
+
+    float tx = x - floor(x);
+    float ty = y - floor(y);
+
+    float v0 = mix(v00, v10, tx);
+    float v1 = mix(v01, v11, tx);
+    return mix(v0, v1, ty);
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= NX * NY) return;
+
+    uint i = idx % NX;
+    uint j = idx / NX;
+    uint base = i + j * NX;
+    float u = uSrc.data[base];
+    float v = vSrc.data[base];
+
+    // 反向追踪
+    float bx = float(i) + 0.5f - u * DT / DX;
+    float by = float(j) + 0.5f - v * DT / DX;
+
+    // 检查越界并应用边界条件
+    bool use_direct = false;
+    float direct_val = 0.0;
+
+    // 左边界 (bx < 0.5)
+    if (bx < 0.5f) {
+        int t = bc_type.data[LEFT_START + j];
+        if (t == 2 || t == 3 || t == 6) {
+            use_direct = true;
+            direct_val = bc_vel_u.data[LEFT_START + j];
+        } else {
+            bx = 0.5f;
+        }
+    }
+    // 右边界 (bx > NX - 0.5)
+    if (!use_direct && bx > float(NX) - 0.5f) {
+        int t = bc_type.data[RIGHT_START + j];
+        if (t == 2 || t == 3 || t == 6) {
+            use_direct = true;
+            direct_val = bc_vel_u.data[RIGHT_START + j];
+        } else {
+            bx = float(NX) - 0.5f;
+        }
+    }
+    // 下边界 (by < 0.5)
+    if (!use_direct && by < 0.5f) {
+        int t = bc_type.data[BOTTOM_START + i];
+        if (t == 2 || t == 3 || t == 6) {
+            use_direct = true;
+            direct_val = bc_vel_v.data[BOTTOM_START + i];
+        } else {
+            by = 0.5f;
+        }
+    }
+    // 上边界 (by > NY - 0.5)
+    if (!use_direct && by > float(NY) - 0.5f) {
+        int t = bc_type.data[TOP_START + i];
+        if (t == 2 || t == 3 || t == 6) {
+            use_direct = true;
+            direct_val = bc_vel_v.data[TOP_START + i];
+        } else {
+            by = float(NY) - 0.5f;
+        }
+    }
+
+    float result;
+    if (use_direct) {
+        result = direct_val;
+    } else {
+        float sx = bx - 0.5f;
+        float sy = by - 0.5f;
+        result = sampleBilinear(sx, sy);
+    }
+
+    dst.data[base] = result;
+}
