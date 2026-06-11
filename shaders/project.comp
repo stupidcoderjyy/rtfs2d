@@ -1,36 +1,47 @@
 #version 450
 
-// 一维工作组大小：128 个线程
 layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 
-// 网格常量（与其它着色器保持一致）
 const uint NX = 128u;
 const uint NY = 128u;
-const float DX = 1.0f / float(NX);   // 网格间距
+const float DX = 1.0f / float(NX);
+const float INV_2DX = 0.5f / DX;
 
-// 缓冲区绑定
-// binding 0：压力场（只读）
-layout(std430, binding = 0) buffer PressureBuffer {
-    float data[];
-} p;
+// 边界偏移常量
+const uint TOP_START    = 0u;
+const uint BOTTOM_START = NX;
+const uint LEFT_START   = 2u * NX;
+const uint RIGHT_START  = 2u * NX + NY;
 
-// binding 2：速度场 u 分量（读写）
-layout(std430, binding = 2) buffer UBuffer {
-    float data[];
-} u;
+layout(std430, binding = 0) buffer PressureBuffer { float data[]; } p;
+layout(std430, binding = 2) buffer UBuffer { float data[]; } u;
+layout(std430, binding = 3) buffer VBuffer { float data[]; } v;
+layout(std430, binding = 5) buffer BCType  { int data[]; } bc_type;
+layout(std430, binding = 6) buffer BCVelU  { float data[]; } bc_vel_u;   // 本求解器中未使用
+layout(std430, binding = 7) buffer BCVelV  { float data[]; } bc_vel_v;   // 本求解器中未使用
 
-// binding 3：速度场 v 分量（读写）
-layout(std430, binding = 3) buffer VBuffer {
-    float data[];
-} v;
+float getPressure(int i, int j, uint self_idx) {
+    if (i >= 0 && i < int(NX) && j >= 0 && j < int(NY)) {
+        uint idx = uint(i) + uint(j) * NX;
+        return p.data[idx];
+    }
+    // 越界，查询边界类型
+    int dir = -1;
+    uint local = 0;
+    if (i < 0) { dir = 0; local = uint(j); }
+    else if (i >= int(NX)) { dir = 2; local = uint(j); }
+    else if (j < 0) { dir = 3; local = uint(i); }
+    else { dir = 1; local = uint(i); }
 
-// 辅助函数：安全获取压力值，越界返回 0.0
-float getPressure(int i, int j) {
-    if (i < 0 || i >= int(NX) || j < 0 || j >= int(NY)) {
+    uint offset = (dir == 0) ? LEFT_START : (dir == 2) ? RIGHT_START : (dir == 1) ? TOP_START : BOTTOM_START;
+    int t = bc_type.data[offset + local];
+    if (t == 1) {               // NoSlipWall → Neumann: 取内部值
+        return p.data[self_idx];
+    } else if (t == 4 || t == 5) { // PressureInlet/Outlet → Dirichlet: 0.0
+        return 0.0f;
+    } else {
         return 0.0f;
     }
-    uint idx = uint(i) + uint(j) * NX;
-    return p.data[idx];
 }
 
 void main() {
@@ -40,15 +51,11 @@ void main() {
     uint i = idx % NX;
     uint j = idx / NX;
 
-    // 获取左右邻居压力值
-    float p_left  = getPressure(int(i) - 1, int(j));
-    float p_right = getPressure(int(i) + 1, int(j));
-    // 获取上下邻居压力值
-    float p_bottom = getPressure(int(i), int(j) - 1);
-    float p_top    = getPressure(int(i), int(j) + 1);
+    float p_left   = getPressure(int(i)-1, int(j), idx);
+    float p_right  = getPressure(int(i)+1, int(j), idx);
+    float p_bottom = getPressure(int(i), int(j)-1, idx);
+    float p_top    = getPressure(int(i), int(j)+1, idx);
 
-    // 压力梯度修正速度（使速度场变为无散）
-    float inv_2dx = 1.0f / (2.0f * DX);
-    u.data[idx] -= (p_right - p_left) * inv_2dx;
-    v.data[idx] -= (p_top - p_bottom) * inv_2dx;
+    u.data[idx] -= (p_right - p_left) * INV_2DX;
+    v.data[idx] -= (p_top - p_bottom) * INV_2DX;
 }

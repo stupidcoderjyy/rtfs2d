@@ -1,6 +1,5 @@
 #version 450
 
-// 工作组大小：128 个线程在 X 方向（一维布局）
 layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 
 const uint NX = 128u;
@@ -8,23 +7,20 @@ const uint NY = 128u;
 const float DT = 0.016f;
 const float DX = 1.0f / float(NX);
 
-// 源场 (uSrc或vSrc)
-layout(std430, binding = 0) buffer SrcBuffer {
-    float data[];
-} src;
+// 边界缓冲区偏移常量
+const uint TOP_START    = 0u;
+const uint BOTTOM_START = NX;
+const uint LEFT_START   = 2u * NX;
+const uint RIGHT_START  = 2u * NX + NY;
 
-// 目标场 (uDst或vDst)
-layout(std430, binding = 1) buffer DstBuffer {
-    float data[];
-} dst;
-
-layout(std430, binding = 2) buffer VelocityuSrcfer {
-    float data[];
-} uSrc;
-
-layout(std430, binding = 3) buffer VelocityvSrcfer {
-    float data[];
-} vSrc;
+layout(std430, binding = 0) buffer SrcBuffer { float data[]; } src;
+layout(std430, binding = 1) buffer DstBuffer { float data[]; } dst;
+layout(std430, binding = 2) buffer VelocityuSrcfer { float data[]; } uSrc;
+layout(std430, binding = 3) buffer VelocityvSrcfer { float data[]; } vSrc;
+// 边界条件拼接缓冲
+layout(std430, binding = 5) buffer BCType  { int data[]; } bc_type;
+layout(std430, binding = 6) buffer BCVelU  { float data[]; } bc_vel_u;
+layout(std430, binding = 7) buffer BCVelV  { float data[]; } bc_vel_v;
 
 float sampleBilinear(float x, float y) {
     uint ix0 = uint(clamp(floor(x), 0.0f, float(NX) - 1.0f));
@@ -46,13 +42,11 @@ float sampleBilinear(float x, float y) {
 }
 
 void main() {
-    // 一维全局索引映射到二维网格 (i, j)
     uint idx = gl_GlobalInvocationID.x;
-    if (idx >= NX * NY) return;   // 边界保护
+    if (idx >= NX * NY) return;
 
     uint i = idx % NX;
     uint j = idx / NX;
-
     uint base = i + j * NX;
     float u = uSrc.data[base];
     float v = vSrc.data[base];
@@ -61,12 +55,59 @@ void main() {
     float bx = float(i) + 0.5f - u * DT / DX;
     float by = float(j) + 0.5f - v * DT / DX;
 
-    bx = clamp(bx, 0.5f, float(NX) - 0.5f);
-    by = clamp(by, 0.5f, float(NY) - 0.5f);
+    // 检查越界并应用边界条件
+    bool use_direct = false;
+    float direct_val = 0.0;
 
-    float sx = bx - 0.5f;
-    float sy = by - 0.5f;
+    // 左边界 (bx < 0.5)
+    if (bx < 0.5f) {
+        int t = bc_type.data[LEFT_START + j];
+        if (t == 2 || t == 3 || t == 6) {
+            use_direct = true;
+            direct_val = bc_vel_u.data[LEFT_START + j];
+        } else {
+            bx = 0.5f;
+        }
+    }
+    // 右边界 (bx > NX - 0.5)
+    if (!use_direct && bx > float(NX) - 0.5f) {
+        int t = bc_type.data[RIGHT_START + j];
+        if (t == 2 || t == 3 || t == 6) {
+            use_direct = true;
+            direct_val = bc_vel_u.data[RIGHT_START + j];
+        } else {
+            bx = float(NX) - 0.5f;
+        }
+    }
+    // 下边界 (by < 0.5)
+    if (!use_direct && by < 0.5f) {
+        int t = bc_type.data[BOTTOM_START + i];
+        if (t == 2 || t == 3 || t == 6) {
+            use_direct = true;
+            direct_val = bc_vel_v.data[BOTTOM_START + i];
+        } else {
+            by = 0.5f;
+        }
+    }
+    // 上边界 (by > NY - 0.5)
+    if (!use_direct && by > float(NY) - 0.5f) {
+        int t = bc_type.data[TOP_START + i];
+        if (t == 2 || t == 3 || t == 6) {
+            use_direct = true;
+            direct_val = bc_vel_v.data[TOP_START + i];
+        } else {
+            by = float(NY) - 0.5f;
+        }
+    }
 
-    float result = sampleBilinear(sx, sy);
+    float result;
+    if (use_direct) {
+        result = direct_val;
+    } else {
+        float sx = bx - 0.5f;
+        float sy = by - 0.5f;
+        result = sampleBilinear(sx, sy);
+    }
+
     dst.data[base] = result;
 }
