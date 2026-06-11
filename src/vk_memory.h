@@ -24,13 +24,47 @@ BufferAndMemory AllocateBuffer(
         vk::BufferUsageFlags usage,
         vk::MemoryPropertyFlags memory_flags);
 
+template<typename T>
 void UploadBufferData(
-        const vk::raii::Device& device,
+        const vk::raii::Device &device,
         vk::PhysicalDevice physical_device,
-        const vk::raii::CommandPool& command_pool,
-        const vk::raii::Queue& queue,
-        const std::vector<float>& data,
-        const vk::raii::Buffer& dst_buffer);
+        const vk::raii::CommandPool &command_pool,
+        const vk::raii::Queue &queue,
+        const std::vector<T> &data,
+        const vk::raii::Buffer &dst_buffer) {
+    auto size = data.size() * sizeof(T);
+    auto [staging_buf, staging_mem] = AllocateBuffer(device, physical_device, size,
+        vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    void* mp = staging_mem->mapMemory(0, size);
+    std::memcpy(mp, data.data(), size);
+    staging_mem->unmapMemory();
+
+    vk::CommandBufferAllocateInfo ai{};
+    ai.setCommandPool(*command_pool)
+        .setCommandBufferCount(1)
+        .setLevel(vk::CommandBufferLevel::ePrimary);
+    std::vector<vk::raii::CommandBuffer> cbs = device.allocateCommandBuffers(ai);
+    auto& cb = cbs.front();
+
+    // 开始命令缓冲区录制（OneTimeSubmit 标记优化）
+    cb.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+
+    // 构造拷贝区域：全缓冲区拷贝，偏移为 0
+    vk::BufferCopy copy_region;
+    copy_region.setSrcOffset(0)
+        .setDstOffset(0)
+        .setSize(size);
+
+    cb.copyBuffer(**staging_buf, *dst_buffer, copy_region);
+    cb.end();
+
+    vk::SubmitInfo si;
+    si.setCommandBuffers(*cb);
+
+    queue.submit(si);
+    queue.waitIdle();
+}
 
 }
 

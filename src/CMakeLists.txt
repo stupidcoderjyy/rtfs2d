@@ -11,6 +11,8 @@ add_library(${TARGET} STATIC
         jacobi_solver.h
         projection_solver.cpp
         projection_solver.h
+        vk_boundary.cpp
+        vk_boundary.h
         vk_compute.cpp
         vk_compute.h
         vk_descriptor.cpp
