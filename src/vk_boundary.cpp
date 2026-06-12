@@ -13,147 +13,61 @@ using namespace rtfs2d;
 
 BoundaryContext::BoundaryContext(DeviceManager& dm, const GridParams& gp) :
         dm_(&dm), grid_params_(gp) {
-    top_count_ = grid_params_.nx;
-    bottom_count_ = grid_params_.nx;
-    left_count_ = grid_params_.ny;
-    right_count_ = grid_params_.ny;
-    bc_total_count_ = 2 * (grid_params_.nx + grid_params_.ny);
-
-    size_t type_size = bc_total_count_ * sizeof(int32_t);
-    auto [type_buf, type_mem] = AllocateBuffer(
-        dm_->device(),
-        dm_->physical_device(),
-        type_size,
-        vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
-        vk::MemoryPropertyFlagBits::eDeviceLocal);
-    bc_type_ = std::move(type_buf);
-    bc_type_memory_ = std::move(type_mem);
-
-    size_t vel_size = bc_total_count_ * sizeof(float);
-    auto [u_buf, u_mem] = AllocateBuffer(
-        dm_->device(),
-        dm_->physical_device(),
-        vel_size,
-        vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
-        vk::MemoryPropertyFlagBits::eDeviceLocal);
-    bc_vel_u_ = std::move(u_buf);
-    bc_vel_u_memory_ = std::move(u_mem);
-
-    auto [v_buf, v_mem] = AllocateBuffer(
-        dm_->device(),
-        dm_->physical_device(),
-        vel_size,
-        vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
-        vk::MemoryPropertyFlagBits::eDeviceLocal);
-    bc_vel_v_ = std::move(v_buf);
-    bc_vel_v_memory_ = std::move(v_mem);
-
-    std::vector init_type(bc_total_count_, static_cast<int32_t>(BoundaryType::kNone));
-    std::vector init_vel(bc_total_count_, 0.0f);
-    UploadBufferData(
-        dm_->device(),
-        dm_->physical_device(),
-        dm_->command_pool(),
-        dm_->graphics_queue(),
-        init_type,
-        *bc_type_);
-    UploadBufferData(
-        dm_->device(),
-        dm_->physical_device(),
-        dm_->command_pool(),
-        dm_->graphics_queue(),
-        init_vel,
-        *bc_vel_u_);
-    UploadBufferData(
-        dm_->device(),
-        dm_->physical_device(),
-        dm_->command_pool(),
-        dm_->graphics_queue(),
-        init_vel,
-        *bc_vel_v_);
+    h_cell_count_ = grid_params_.nx - 2;
+    v_cell_count_ = grid_params_.ny - 2;
+    h_buf_size_ = h_cell_count_ * kBufferUnitSize;
+    v_buf_size_ = v_cell_count_ * kBufferUnitSize;
+    for (int i = 0; i < 4; ++i) {
+        auto buf_size = i & 1 ? v_buf_size_ : h_buf_size_;
+        auto [type_buf, type_mem] = AllocateBuffer(
+            dm_->device(),
+            dm_->physical_device(),
+            buf_size,
+            vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+            vk::MemoryPropertyFlagBits::eDeviceLocal);
+        //默认边界条件：无滑移墙壁
+        std::vector<uint8_t> initial(buf_size, 0); // kNoSlipWall + 0.0f + 0.0f
+        UploadBufferData(dm_->device(), dm_->physical_device(), dm_->command_pool(),
+            dm_->graphics_queue(), initial, *type_buf);
+        buffer_bc_info_[i] = std::move(type_buf);
+        memory_bc_info_[i] = std::move(type_mem);
+    }
 }
 
-void BoundaryContext::SetBoundary(
-        BoundaryDirection dir,
-        BoundaryType type,
-        float begin,
-        float end,
-        float u,
-        float v) {
+void BoundaryContext::SetBoundary(BoundaryDirection dir, BoundaryType type,
+        float begin, float end, float u, float v) {
     int idx = static_cast<int>(dir);
     segments_[idx].push_back({begin, end, type, u, v});
 }
 
-void BoundaryContext::Upload() const {
-    std::vector type_data(bc_total_count_, static_cast<int32_t>(BoundaryType::kNone));
-    std::vector u_data(bc_total_count_, 0.0f);
-    std::vector v_data(bc_total_count_, 0.0f);
+void BoundaryContext::BeginSetBoundary() {
+    for (auto& seg_vec : segments_) {
+        seg_vec.clear();
+    }
+}
 
-    uint32_t offset = 0;
-    for (int dir = 0; dir < 4; ++dir) {
-        uint32_t num_cells = 0;
-        if (dir == static_cast<int>(BoundaryDirection::kTop) ||
-                dir == static_cast<int>(BoundaryDirection::kBottom)) {
-            num_cells = grid_params_.nx;
-        } else {
-            num_cells = grid_params_.ny;
-        }
-
-        for (uint32_t i = 0; i < num_cells; ++i) {
-            float t = num_cells == 1 ? 0.5f :
-                      static_cast<float>(i) / static_cast<float>(num_cells - 1);
-            for (const auto& segs = segments_[dir];
-                    const auto &[begin, end, type, u, v] : std::views::reverse(segs)) {
-                if (constexpr float kEps = 1e-6f; t >= begin - kEps && t <= end + kEps) {
-                    type_data[offset + i] = static_cast<int32_t>(type);
-                    u_data[offset + i] = u;
-                    v_data[offset + i] = v;
-                    break;
-                }
+void BoundaryContext::EndSetBoundary() {
+    for (int d = 0; d < 4; ++d) {
+        uint32_t cell_count = d & 1 ? v_cell_count_ : h_cell_count_;
+        uint32_t buf_size = d & 1 ? v_buf_size_ : h_buf_size_;
+        buffer_size_[d] = buf_size;
+        //默认边界条件：无滑移墙壁
+        std::vector<uint8_t> bytes(buf_size, 0);
+        //覆盖自定义边界条件
+        for (const auto& seg_vec = segments_[d]; const auto&[bp, ep, type, u, v] : seg_vec) {
+            uint32_t begin = static_cast<int>(bp * static_cast<float>(cell_count));
+            uint32_t end = static_cast<int>(ep * static_cast<float>(cell_count));
+            uint32_t off = begin * kBufferUnitSize;
+            auto uint_type = static_cast<uint32_t>(type);
+            for (uint32_t i = begin; i < end; ++i) {
+                auto* p = bytes.data() + off;
+                memcpy(p, &uint_type, sizeof(uint32_t));
+                memcpy(p + sizeof(uint32_t), &u, sizeof(float));
+                memcpy(p + sizeof(uint32_t) + sizeof(float), &v, sizeof(float));
+                off += kBufferUnitSize;
             }
         }
-        offset += num_cells;
-    }
-
-    UploadBufferData(
-        dm_->device(),
-        dm_->physical_device(),
-        dm_->command_pool(),
-        dm_->graphics_queue(),
-        type_data,
-        *bc_type_);
-    UploadBufferData(
-        dm_->device(),
-        dm_->physical_device(),
-        dm_->command_pool(),
-        dm_->graphics_queue(),
-        u_data,
-        *bc_vel_u_);
-    UploadBufferData(
-        dm_->device(),
-        dm_->physical_device(),
-        dm_->command_pool(),
-        dm_->graphics_queue(),
-        v_data,
-        *bc_vel_v_);
-}
-
-uint32_t BoundaryContext::bc_offset(BoundaryDirection dir) const {
-    switch (dir) {
-        case BoundaryDirection::kTop:    return 0;
-        case BoundaryDirection::kBottom: return top_count_;
-        case BoundaryDirection::kLeft:   return top_count_ + bottom_count_;
-        case BoundaryDirection::kRight:  return top_count_ + bottom_count_ + left_count_;
-        default: return 0;
-    }
-}
-
-uint32_t BoundaryContext::bc_count(BoundaryDirection dir) const {
-    switch (dir) {
-        case BoundaryDirection::kTop:    return top_count_;
-        case BoundaryDirection::kBottom: return bottom_count_;
-        case BoundaryDirection::kLeft:   return left_count_;
-        case BoundaryDirection::kRight:  return right_count_;
-        default: return 0;
+        UploadBufferData(dm_->device(), dm_->physical_device(), dm_->command_pool(),
+            dm_->graphics_queue(), bytes, *buffer_bc_info_[d]);
     }
 }

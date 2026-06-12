@@ -47,13 +47,23 @@ std::unique_ptr<vk::raii::ShaderModule> DeviceManager::LoadShader(const std::str
 
 std::unique_ptr<vk::raii::Pipeline> DeviceManager::CreateComputePipelineFromFile(
         const vk::raii::PipelineLayout &layout,
-        const std::string &spv_path) const {
+        const std::string &spv_path,
+        const std::vector<vk::SpecializationMapEntry> &mapEntries,
+        const std::vector<uint8_t> &data) const {
     auto shader = LoadShader(spv_path);
 
     vk::PipelineShaderStageCreateInfo pss_ci{};
     pss_ci.setStage(vk::ShaderStageFlagBits::eCompute)
         .setModule(**shader)
         .setPName("main");
+
+    vk::SpecializationInfo specInfo{};
+    if (!mapEntries.empty()) {
+        specInfo.setMapEntries(mapEntries)
+            .setData<uint8_t>(data);
+        pss_ci.setPSpecializationInfo(&specInfo);
+    }
+
     vk::ComputePipelineCreateInfo cp_ci{};
     cp_ci.setStage(pss_ci)
         .setLayout(layout);

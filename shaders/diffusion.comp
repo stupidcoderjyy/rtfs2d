@@ -4,16 +4,19 @@ layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 layout(constant_id = 0) const uint NX = 128u;
 layout(constant_id = 1) const uint NY = 128u;
 
-layout(std430, binding = 0) buffer USrc { float data[]; } u;
-layout(std430, binding = 1) buffer VSrc { float data[]; } v;
-layout(std430, binding = 2) buffer DivBuffer { float data[]; } div;
+layout(std430, binding = 0) buffer USrc { float data[]; } uSrc;
+layout(std430, binding = 1) buffer VSrc { float data[]; } vSrc;
+layout(std430, binding = 2) buffer UDst { float data[]; } uDst;
+layout(std430, binding = 3) buffer VDst { float data[]; } vDst;
 
 layout(std430, binding = 5) buffer LeftB   { uint data[]; } left;
 layout(std430, binding = 6) buffer RightB  { uint data[]; } right;
 layout(std430, binding = 7) buffer BottomB { uint data[]; } bottom;
 layout(std430, binding = 8) buffer TopB    { uint data[]; } top;
 
-// ---------- 边界值 ----------
+layout(push_constant) uniform Params { float alpha; float beta; } pc;
+
+// ---------- 边界值（速度 BC，与 advection.comp 一致） ----------
 float border_velocity(float vi, bool is_u, int edge, uint local) {
     uint bi = local * 3u;
     uint type;
@@ -37,26 +40,26 @@ float border_velocity(float vi, bool is_u, int edge, uint local) {
         bc_v = uintBitsToFloat(top.data[bi+2u]);
     }
     switch (type) {
-        case 0: // NoSlipWall: 壁面静止, 虚拟速度=0
-            return 0.0f;
-        case 1: // SlipWall: 法向=0, 切向=边缘值
-            return ((edge <= 1) == is_u) ? 0.0f : vi;
-        case 2: // Velocity: 虚拟速度=预设值
-            return is_u ? bc_u : bc_v;
-        case 3: // Pressure: 虚拟速度=边缘值 (零梯度)
+        case 0: // NoSlipWall: 反射
+            return -vi;
+        case 1: // SlipWall: 法向反射, 切向保持
+            return ((edge <= 1) == is_u) ? -vi : vi;
+        case 2: // Velocity
+            return is_u ? (2.0 * bc_u - vi) : (2.0 * bc_v - vi);
+        case 3: // Pressure
             return vi;
     }
     return 0.0f;
 }
 
-// ---------- 边界感知的速度查询 ----------
-float getU(int i, int j) {
+// ---------- 边界感知的邻居查询 ----------
+float getNeighborU(int i, int j) {
     if (i >= 0 && i < int(NX) && j >= 0 && j < int(NY)) {
-        return u.data[uint(i) + uint(j) * NX];
+        return uSrc.data[uint(i) + uint(j) * NX];
     }
     int ci = clamp(i, 0, int(NX) - 1);
     int cj = clamp(j, 0, int(NY) - 1);
-    float vi = u.data[uint(ci) + uint(cj) * NX];
+    float vi = uSrc.data[uint(ci) + uint(cj) * NX];
     int edge; uint local;
     if (i < 0) {
         edge = 0; local = uint(cj);
@@ -70,13 +73,13 @@ float getU(int i, int j) {
     return border_velocity(vi, true, edge, local);
 }
 
-float getV(int i, int j) {
+float getNeighborV(int i, int j) {
     if (i >= 0 && i < int(NX) && j >= 0 && j < int(NY)) {
-        return v.data[uint(i) + uint(j) * NX];
+        return vSrc.data[uint(i) + uint(j) * NX];
     }
     int ci = clamp(i, 0, int(NX) - 1);
     int cj = clamp(j, 0, int(NY) - 1);
-    float vi = v.data[uint(ci) + uint(cj) * NX];
+    float vi = vSrc.data[uint(ci) + uint(cj) * NX];
     int edge; uint local;
     if (i < 0) {
         edge = 0; local = uint(cj);
@@ -95,14 +98,22 @@ void main() {
     uint idx = gl_GlobalInvocationID.x;
     if (idx >= NX * NY) return;
 
-    float inv_2dx = 0.5f * float(NX);
     uint i = idx % NX;
     uint j = idx / NX;
 
-    float u_left  = getU(int(i)-1, int(j));
-    float u_right = getU(int(i)+1, int(j));
-    float v_bottom = getV(int(i), int(j)-1);
-    float v_top    = getV(int(i), int(j)+1);
+    // u 分量
+    float u_left   = getNeighborU(int(i)-1, int(j));
+    float u_right  = getNeighborU(int(i)+1, int(j));
+    float u_bottom = getNeighborU(int(i), int(j)-1);
+    float u_top    = getNeighborU(int(i), int(j)+1);
+    float u_b = uSrc.data[idx];
+    uDst.data[idx] = (u_left + u_right + u_bottom + u_top + pc.alpha * u_b) / pc.beta;
 
-    div.data[idx] = (u_right - u_left + v_top - v_bottom) * inv_2dx;
+    // v 分量
+    float v_left   = getNeighborV(int(i)-1, int(j));
+    float v_right  = getNeighborV(int(i)+1, int(j));
+    float v_bottom = getNeighborV(int(i), int(j)-1);
+    float v_top    = getNeighborV(int(i), int(j)+1);
+    float v_b = vSrc.data[idx];
+    vDst.data[idx] = (v_left + v_right + v_bottom + v_top + pc.alpha * v_b) / pc.beta;
 }

@@ -1,18 +1,12 @@
 ﻿set(TARGET rtfs2d_core)
 
 add_library(${TARGET} STATIC
-        advection_solver.cpp
-        advection_solver.h
-        divergence_solver.cpp
-        divergence_solver.h
+        fluid_solvers.cpp
+        fluid_solvers.h
         grid.cpp
         grid.h
-        jacobi_solver.cpp
-        jacobi_solver.h
         pressure_bc_solver.cpp
         pressure_bc_solver.h
-        projection_solver.cpp
-        projection_solver.h
         vk_boundary.cpp
         vk_boundary.h
         vk_compute.cpp

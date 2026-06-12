@@ -6,14 +6,18 @@ layout(constant_id = 1) const uint NY = 128u;
 
 const float DT = 0.016f;
 
-layout(std430, binding = 0) buffer USrc { float data[]; } u;
-layout(std430, binding = 1) buffer VSrc { float data[]; } v;
-layout(std430, binding = 2) buffer PSrc { float data[]; } p;
+layout(std430, binding = 0) buffer USrc { float data[]; } uSrc;
+layout(std430, binding = 1) buffer VSrc { float data[]; } vSrc;
+layout(std430, binding = 2) buffer DivSrc { float data[]; } divSrc;
+layout(std430, binding = 3) buffer PSrc { float data[]; } pSrc;
+layout(std430, binding = 4) buffer PDst { float data[]; } pDst;
 
 layout(std430, binding = 5) buffer LeftB   { uint data[]; } left;
 layout(std430, binding = 6) buffer RightB  { uint data[]; } right;
 layout(std430, binding = 7) buffer BottomB { uint data[]; } bottom;
 layout(std430, binding = 8) buffer TopB    { uint data[]; } top;
+
+layout(push_constant) uniform Params { float alpha; float beta; } pc;
 
 // ---------- 边界值（压力 BC） ----------
 float border_pressure(float pi, int edge, int ci, int cj) {
@@ -46,7 +50,7 @@ float border_pressure(float pi, int edge, int ci, int cj) {
             return pi;
         case 2: { // Velocity: p_b = p_i + (u_face - ubc_n) * dx / dt
             uint i_idx = uint(ci) + uint(cj) * NX;
-            float un_i = (edge <= 1) ? u.data[i_idx] : v.data[i_idx];
+            float un_i = (edge <= 1) ? uSrc.data[i_idx] : vSrc.data[i_idx];
             float ubc_n = (edge <= 1) ? bc_u : bc_v;
             float u_face = 0.5 * ((2.0 * ubc_n - un_i) + un_i);
             float dx = 1.0f / float(NX);
@@ -58,14 +62,14 @@ float border_pressure(float pi, int edge, int ci, int cj) {
     return 0.0f;
 }
 
-// ---------- 边界感知的压力查询 ----------
-float getPressure(int i, int j) {
+// ---------- 边界感知的邻居查询 ----------
+float getNeighborP(int i, int j) {
     if (i >= 0 && i < int(NX) && j >= 0 && j < int(NY)) {
-        return p.data[uint(i) + uint(j) * NX];
+        return pSrc.data[uint(i) + uint(j) * NX];
     }
     int ci = clamp(i, 0, int(NX) - 1);
     int cj = clamp(j, 0, int(NY) - 1);
-    float vi = p.data[uint(ci) + uint(cj) * NX];
+    float vi = pSrc.data[uint(ci) + uint(cj) * NX];
     int edge;
     if (i < 0) {
         edge = 0;
@@ -84,15 +88,14 @@ void main() {
     uint idx = gl_GlobalInvocationID.x;
     if (idx >= NX * NY) return;
 
-    float inv_2dx = 0.5f * float(NX);
     uint i = idx % NX;
     uint j = idx / NX;
 
-    float p_left   = getPressure(int(i)-1, int(j));
-    float p_right  = getPressure(int(i)+1, int(j));
-    float p_bottom = getPressure(int(i), int(j)-1);
-    float p_top    = getPressure(int(i), int(j)+1);
+    float left   = getNeighborP(int(i)-1, int(j));
+    float right  = getNeighborP(int(i)+1, int(j));
+    float bottom = getNeighborP(int(i), int(j)-1);
+    float top    = getNeighborP(int(i), int(j)+1);
 
-    u.data[idx] -= (p_right - p_left) * inv_2dx;
-    v.data[idx] -= (p_top - p_bottom) * inv_2dx;
+    float b = divSrc.data[idx];
+    pDst.data[idx] = (left + right + bottom + top + pc.alpha * b) / pc.beta;
 }

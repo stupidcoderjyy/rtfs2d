@@ -1,17 +1,14 @@
-﻿//
+//
 // Created by PC on 2026/6/9.
 //
 
 #ifndef RTFS2D_VK_COMPUTE_H
 #define RTFS2D_VK_COMPUTE_H
 
+#include <functional>
 #include <vulkan/vulkan_raii.hpp>
 #include "grid.h"
-#include "jacobi_solver.h"
-#include "advection_solver.h"
-#include "divergence_solver.h"
-#include "projection_solver.h"
-#include "vorticity_solver.h"
+#include "fluid_solvers.h"
 #include "pressure_bc_solver.h"
 #include "vk_boundary.h"
 
@@ -21,22 +18,18 @@ class DeviceManager;
 
 class ComputeContext {
 public:
-    explicit ComputeContext(DeviceManager& dm);
+    explicit ComputeContext(DeviceManager& dm, const GridParams& params);
     void RecordAndSubmit(const vk::raii::Queue& queue) const;
 
     enum DescriptorSetIndex {
-        kSetAdvectionU = 0,          // 平流 u 分量
-        kSetAdvectionV = 1,          // 平流 v 分量
-        kSetDiffusionUEven = 2,      // 扩散 u 分量偶次迭代
-        kSetDiffusionUOdd = 3,       // 扩散 u 分量奇次迭代
-        kSetDiffusionVEven = 4,      // 扩散 v 分量偶次迭代
-        kSetDiffusionVOdd = 5,       // 扩散 v 分量奇次迭代
-        kSetDivergence = 6,          // 散度计算
-        kSetPressureEven = 7,        // 压力求解偶次迭代
-        kSetPressureOdd = 8,         // 压力求解奇次迭代
-        kSetProjection = 9,          // 压力投影修正速度
-        kSetVorticity = 10,          // 涡量约束
-        kSetPressureBc = 11
+        kSetAdvection,         // 平流
+        kSetVorticity,         // 涡量约束
+        kSetDiffusionEven,     // 扩散 u 分量偶次迭代
+        kSetDiffusionOdd,      // 扩散 u 分量奇次迭代
+        kSetDivergence,        // 散度计算
+        kSetPressureEven,      // 压力求解偶次迭代
+        kSetPressureOdd,       // 压力求解奇次迭代
+        kSetProjection,        // 压力投影修正速度
     };
 
     void AddBufferMemoryWriteReadBarrier(const vk::raii::CommandBuffer& cb, int buf) const;
@@ -61,31 +54,33 @@ public:
 private:
     DeviceManager* dm_;
     // { u_src, u_dst, v_src, v_dst }
-    static constexpr int kBindingsSize = 8;
+    static constexpr int kBindingsSize = 9;
     std::vector<std::unique_ptr<vk::raii::Buffer>> velocity_buffers_;
     std::vector<std::unique_ptr<vk::raii::DeviceMemory>> velocity_memories_;
     std::unique_ptr<vk::raii::DescriptorSetLayout> descriptor_set_layout_;
     std::unique_ptr<vk::raii::PipelineLayout> pipeline_layout_;
     std::unique_ptr<vk::raii::DescriptorPool> descriptor_pool_;
     std::vector<std::unique_ptr<vk::raii::DescriptorSet>> descriptor_sets_;
-    std::unique_ptr<AdvectionSolver> advection_solver_;
-    std::unique_ptr<JacobiSolver> jacobi_solver_;
-    std::unique_ptr<DivergenceSolver> divergence_solver_;
-    std::unique_ptr<ProjectionSolver> projection_solver_;
-    std::unique_ptr<VorticitySolver> vorticity_solver_;
+    std::unique_ptr<FluidSolvers> fluid_solvers_;
     std::unique_ptr<PressureBCSolver> pressure_bc_solver_;
-    const GridParams grid_params_{128, 128, 1.0f, 1.0f};
-    const int compute_cell_count_ = grid_params_.TotalCells();
-    const vk::DeviceSize compute_buf_size_ = compute_cell_count_ * sizeof(float);
+    GridParams grid_params_;
+    const int compute_cell_count_;
+    const vk::DeviceSize compute_buf_size_;
     std::unique_ptr<BoundaryContext> boundary_ctx_;
 
     void CreateVelocityBuffers();
     void CreateDescriptorSets();
     void CreatePipelineLayout();
-    void RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) const;
+    void RecordFluidStepCommands(const vk::raii::Queue& queue, const vk::raii::CommandBuffer& cb) const;
     void InitializeVortexField() const; // 初始化流场为涡旋场
 
-    void DebugReadBack(int buffer, const std::string& log_prefix, const std::vector<int>& indexes) const;
+    void DebugReadBackBuffer(const vk::raii::Buffer& buf, uint32_t size,
+        const std::function<void(void* buf, uint32_t len)>& handler) const;
+    void DebugReadBackVelocityBuffer(const vk::raii::Queue& queue, const vk::raii::CommandBuffer& cb,
+        int buffer, const std::string& log_prefix) const;
+    void DebugReadBackVelocityBufferPoints(const vk::raii::Queue& queue, const vk::raii::CommandBuffer& cb,
+        int buffer, const std::string& log_prefix, const std::vector<int>& indexes) const;
+    void DebugReadBackBoundaryBuffer(BoundaryDirection d) const;
 };
 
 }

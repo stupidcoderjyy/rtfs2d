@@ -1,111 +1,132 @@
 #version 450
 
 layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+layout(constant_id = 0) const uint NX = 128u;
+layout(constant_id = 1) const uint NY = 128u;
 
-const uint NX = 128u;
-const uint NY = 128u;
-const float DX = 1.0f / float(NX);
-const float INV_2DX = 0.5f / DX;
+layout(std430, binding = 0) buffer UBuffer { float data[]; } u;
+layout(std430, binding = 1) buffer VBuffer { float data[]; } v;
 
-const uint TOP_START    = 0u;
-const uint BOTTOM_START = NX;
-const uint LEFT_START   = 2u * NX;
-const uint RIGHT_START  = 2u * NX + NY;
-
-layout(std430, binding = 2) buffer UBuffer { float data[]; } u;
-layout(std430, binding = 3) buffer VBuffer { float data[]; } v;
-layout(std430, binding = 5) buffer BCType  { int data[]; } bc_type;
-layout(std430, binding = 6) buffer BCVelU  { float data[]; } bc_vel_u;
-layout(std430, binding = 7) buffer BCVelV  { float data[]; } bc_vel_v;
+layout(std430, binding = 5) buffer LeftB   { uint data[]; } left;
+layout(std430, binding = 6) buffer RightB  { uint data[]; } right;
+layout(std430, binding = 7) buffer BottomB { uint data[]; } bottom;
+layout(std430, binding = 8) buffer TopB    { uint data[]; } top;
 
 layout(push_constant) uniform Params { float epsilon; } pc;
 
-float getU(int i, int j, uint self_idx) {
-    if (i >= 0 && i < int(NX) && j >= 0 && j < int(NY)) {
-        uint idx = uint(i) + uint(j) * NX;
-        return u.data[idx];
+// ---------- 边界值 ----------
+float border_velocity(float vi, bool is_u, int edge, uint local) {
+    uint bi = local * 3u;
+    uint type;
+    float bc_u, bc_v;
+
+    if (edge == 0) {
+        type = left.data[bi];
+        bc_u = uintBitsToFloat(left.data[bi+1u]);
+        bc_v = uintBitsToFloat(left.data[bi+2u]);
+    } else if (edge == 1) {
+        type = right.data[bi];
+        bc_u = uintBitsToFloat(right.data[bi+1u]);
+        bc_v = uintBitsToFloat(right.data[bi+2u]);
+    } else if (edge == 2) {
+        type = bottom.data[bi];
+        bc_u = uintBitsToFloat(bottom.data[bi+1u]);
+        bc_v = uintBitsToFloat(bottom.data[bi+2u]);
+    } else {
+        type = top.data[bi];
+        bc_u = uintBitsToFloat(top.data[bi+1u]);
+        bc_v = uintBitsToFloat(top.data[bi+2u]);
     }
-    int dir = -1; uint local = 0;
-    if (i < 0) { dir = 0; local = uint(j); }
-    else if (i >= int(NX)) { dir = 2; local = uint(j); }
-    else if (j < 0) { dir = 3; local = uint(i); }
-    else { dir = 1; local = uint(i); }
-    uint offset = (dir == 0) ? LEFT_START : (dir == 2) ? RIGHT_START : (dir == 1) ? TOP_START : BOTTOM_START;
-    int t = bc_type.data[offset + local];
-    if (t == 1) return 0.0f;
-    else if (t == 2) return bc_vel_u.data[offset + local];
-    else if (t == 3) {
-        int ci = (i < 0) ? 0 : (i >= int(NX)) ? int(NX)-1 : i;
-        int cj = (j < 0) ? 0 : (j >= int(NY)) ? int(NY)-1 : j;
-        return u.data[uint(ci) + uint(cj) * NX];
+    switch (type) {
+        case 0: // NoSlipWall: 壁面静止, 虚拟速度=0
+            return 0.0f;
+        case 1: // SlipWall: 法向=0, 切向=边缘值
+            return ((edge <= 1) == is_u) ? 0.0f : vi;
+        case 2: // Velocity: 虚拟速度=预设值
+            return is_u ? bc_u : bc_v;
+        case 3: // Pressure: 虚拟速度=边缘值 (零梯度)
+            return vi;
     }
     return 0.0f;
 }
 
-float getV(int i, int j, uint self_idx) {
+// ---------- 边界感知的速度查询 ----------
+float getU(int i, int j) {
     if (i >= 0 && i < int(NX) && j >= 0 && j < int(NY)) {
-        uint idx = uint(i) + uint(j) * NX;
-        return v.data[idx];
+        return u.data[uint(i) + uint(j) * NX];
     }
-    int dir = -1; uint local = 0;
-    if (i < 0) { dir = 0; local = uint(j); }
-    else if (i >= int(NX)) { dir = 2; local = uint(j); }
-    else if (j < 0) { dir = 3; local = uint(i); }
-    else { dir = 1; local = uint(i); }
-    uint offset = (dir == 0) ? LEFT_START : (dir == 2) ? RIGHT_START : (dir == 1) ? TOP_START : BOTTOM_START;
-    int t = bc_type.data[offset + local];
-    if (t == 1) return 0.0f;
-    else if (t == 2) return bc_vel_v.data[offset + local];
-    else if (t == 3) {
-        int ci = (i < 0) ? 0 : (i >= int(NX)) ? int(NX)-1 : i;
-        int cj = (j < 0) ? 0 : (j >= int(NY)) ? int(NY)-1 : j;
-        return v.data[uint(ci) + uint(cj) * NX];
+    int ci = clamp(i, 0, int(NX) - 1);
+    int cj = clamp(j, 0, int(NY) - 1);
+    float vi = u.data[uint(ci) + uint(cj) * NX];
+    int edge; uint local;
+    if (i < 0) {
+        edge = 0; local = uint(cj);
+    } else if (i >= int(NX)) {
+        edge = 1; local = uint(cj);
+    } else if (j < 0) {
+        edge = 2; local = uint(ci);
+    } else {
+        edge = 3; local = uint(ci);
     }
-    return 0.0f;
+    return border_velocity(vi, true, edge, local);
 }
 
+float getV(int i, int j) {
+    if (i >= 0 && i < int(NX) && j >= 0 && j < int(NY)) {
+        return v.data[uint(i) + uint(j) * NX];
+    }
+    int ci = clamp(i, 0, int(NX) - 1);
+    int cj = clamp(j, 0, int(NY) - 1);
+    float vi = v.data[uint(ci) + uint(cj) * NX];
+    int edge; uint local;
+    if (i < 0) {
+        edge = 0; local = uint(cj);
+    } else if (i >= int(NX)) {
+        edge = 1; local = uint(cj);
+    } else if (j < 0) {
+        edge = 2; local = uint(ci);
+    } else {
+        edge = 3; local = uint(ci);
+    }
+    return border_velocity(vi, false, edge, local);
+}
+
+// ---------- 主函数 ----------
 void main() {
     uint idx = gl_GlobalInvocationID.x;
     if (idx >= NX * NY) return;
 
+    float dx = 1.0f / float(NX);
+    float inv_2dx = 0.5f * float(NX);
     uint i = idx % NX;
     uint j = idx / NX;
 
-    // 1) ω = ∂v/∂x - ∂u/∂y
-    float v_left  = getV(int(i)-1, int(j), idx);
-    float v_right = getV(int(i)+1, int(j), idx);
-    float u_down  = getU(int(i), int(j)-1, idx);
-    float u_up    = getU(int(i), int(j)+1, idx);
-    float omega = (v_right - v_left - u_up + u_down) * INV_2DX;
+    float v_left  = getV(int(i)-1, int(j));
+    float v_right = getV(int(i)+1, int(j));
+    float u_down  = getU(int(i), int(j)-1);
+    float u_up    = getU(int(i), int(j)+1);
+    float omega = (v_right - v_left - u_up + u_down) * inv_2dx;
 
-    // 2) ∇|ω|
-    float wr = abs((getV(int(i) + 2, int(j), idx) - getV(int(i), int(j), idx)) * INV_2DX
-                 - (getU(int(i) + 1, int(j) + 1, idx) - getU(int(i) + 1, int(j) - 1, idx)) * INV_2DX);
-    float wl = abs((getV(int(i), int(j), idx) - getV(int(i) - 2, int(j), idx)) * INV_2DX
-                 - (getU(int(i) - 1, int(j) + 1, idx) - getU(int(i) - 1, int(j) - 1, idx)) * INV_2DX);
-    float wu = abs((getV(int(i) + 1, int(j) + 1, idx) - getV(int(i) - 1, int(j) + 1, idx)) * INV_2DX
-                 - (getU(int(i), int(j) + 2, idx) - getU(int(i), int(j), idx)) * INV_2DX);
-    float wd = abs((getV(int(i) + 1, int(j) - 1, idx) - getV(int(i) - 1, int(j) - 1, idx)) * INV_2DX
-                 - (getU(int(i), int(j), idx) - getU(int(i), int(j) - 2, idx)) * INV_2DX);
+    float wr = abs((getV(int(i)+2, int(j)) - getV(int(i), int(j))) * inv_2dx
+                 - (getU(int(i)+1, int(j)+1) - getU(int(i)+1, int(j)-1)) * inv_2dx);
+    float wl = abs((getV(int(i), int(j)) - getV(int(i)-2, int(j))) * inv_2dx
+                 - (getU(int(i)-1, int(j)+1) - getU(int(i)-1, int(j)-1)) * inv_2dx);
+    float wu = abs((getV(int(i)+1, int(j)+1) - getV(int(i)-1, int(j)+1)) * inv_2dx
+                 - (getU(int(i), int(j)+2) - getU(int(i), int(j))) * inv_2dx);
+    float wd = abs((getV(int(i)+1, int(j)-1) - getV(int(i)-1, int(j)-1)) * inv_2dx
+                 - (getU(int(i), int(j)) - getU(int(i), int(j)-2)) * inv_2dx);
 
-    float grad_x = (wr - wl) * INV_2DX;
-    float grad_y = (wu - wd) * INV_2DX;
+    float grad_x = (wr - wl) * inv_2dx;
+    float grad_y = (wu - wd) * inv_2dx;
 
-    // 3) F = ε * DX * (N × ω)
     float len = length(vec2(grad_x, grad_y));
     float nx = 0.0, ny = 0.0;
     if (len > 1e-6) { nx = grad_x / len; ny = grad_y / len; }
 
-    float fx = pc.epsilon * DX * ny * omega;
-    float fy = -pc.epsilon * DX * nx * omega;
+    float fx = pc.epsilon * dx * ny * omega;
+    float fy = -pc.epsilon * dx * nx * omega;
 
-    // 壁面衰减：距边界 3 格内抑制力
-    float dist = float(min(min(i, j), min(NX - 1u - i, NY - 1u - j)));
-    float damp = min(1.0, dist / 3.0);
-    fx *= damp; fy *= damp;
-
-    // 力幅值上限：每帧速度变化不超过 2 个网格单元
-    float f_max = 2.0 / DX;
+    float f_max = 2.0 / dx;
     float fmag = length(vec2(fx, fy));
     if (fmag > f_max) { fx *= f_max / fmag; fy *= f_max / fmag; }
 

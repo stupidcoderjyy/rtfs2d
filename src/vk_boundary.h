@@ -10,21 +10,18 @@ namespace rtfs2d {
 class DeviceManager;
 struct GridParams;
 
-enum class BoundaryDirection : int32_t {
-    kTop = 0,
-    kBottom,
-    kLeft,
-    kRight
+enum class BoundaryDirection : uint32_t {
+    kLeft = 0,
+    kRight = 1,
+    kBottom = 2,
+    kTop = 3
 };
 
-enum class BoundaryType : int32_t {
-    kNone = 0,
-    kNoSlipWall,
-    kVelocityInlet,
-    kVelocityOutlet,
-    kPressureInlet,
-    kPressureOutlet,
-    kMovingWall
+enum class BoundaryType : int8_t {
+    kNoSlipWall = 0,
+    kSlipWall = 1,
+    kVelocity = 2,
+    kPressure = 3
 };
 
 struct BoundarySegment {
@@ -39,41 +36,32 @@ class BoundaryContext {
 public:
     BoundaryContext(DeviceManager& dm, const GridParams& gp);
 
-    void SetBoundary(
-        BoundaryDirection dir,
-        BoundaryType type,
-        float begin = 0.0f,
-        float end = 1.0f,
-        float u = 0.0f,
-        float v = 0.0f);
+    void SetBoundary(BoundaryDirection dir, BoundaryType type,
+        float begin = 0.0f, float end = 1.0f, float u = 0.0f, float v = 0.0f);
 
-    void Upload() const;
+    void BeginSetBoundary();
+    void EndSetBoundary();
 
-    const vk::raii::Buffer& bc_type_buffer() const { return *bc_type_; }
-    const vk::raii::Buffer& bc_vel_u_buffer() const { return *bc_vel_u_; }
-    const vk::raii::Buffer& bc_vel_v_buffer() const { return *bc_vel_v_; }
+    const vk::raii::Buffer& BufferAt(BoundaryDirection d) const {
+        return *buffer_bc_info_[static_cast<int>(d)];
+    }
 
-    uint32_t bc_offset(BoundaryDirection dir) const;
-    uint32_t bc_count(BoundaryDirection dir) const;
+    uint32_t BufferSize(BoundaryDirection d) const {
+        return buffer_size_[static_cast<int>(d)];
+    }
 
 private:
     DeviceManager* dm_;
     const GridParams& grid_params_;
+    uint32_t h_cell_count_, v_cell_count_;
+    uint32_t h_buf_size_, v_buf_size_;
 
-    uint32_t top_count_;
-    uint32_t bottom_count_;
-    uint32_t left_count_;
-    uint32_t right_count_;
-    uint32_t bc_total_count_;
-
-    std::array<std::vector<BoundarySegment>, 4> segments_;
-
-    std::unique_ptr<vk::raii::Buffer> bc_type_;
-    std::unique_ptr<vk::raii::DeviceMemory> bc_type_memory_;
-    std::unique_ptr<vk::raii::Buffer> bc_vel_u_;
-    std::unique_ptr<vk::raii::DeviceMemory> bc_vel_u_memory_;
-    std::unique_ptr<vk::raii::Buffer> bc_vel_v_;
-    std::unique_ptr<vk::raii::DeviceMemory> bc_vel_v_memory_;
+    std::array<std::vector<BoundarySegment>, 4> segments_{};
+    std::array<uint32_t, 4> buffer_size_{};
+    // 存储边界条件的信息，每个数据单元包括 int8 + float + float
+    static constexpr uint32_t kBufferUnitSize = sizeof(uint32_t) + sizeof(float) * 2;
+    std::array<std::unique_ptr<vk::raii::Buffer>, 4> buffer_bc_info_;
+    std::array<std::unique_ptr<vk::raii::DeviceMemory>, 4> memory_bc_info_;
 };
 
 } // namespace rtfs2d

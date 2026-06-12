@@ -1,4 +1,4 @@
-﻿//
+//
 // Created by PC on 2026/6/9.
 //
 
@@ -91,10 +91,25 @@ void GraphicsContext::CreateGraphicsPipeline() {
         .setModule(**vert_shader_module)
         .setPName("main");
 
+
+    const auto& params = cc_->grid_params();
+    std::vector<vk::SpecializationMapEntry> mes = {
+        {0, 0, sizeof(uint32_t)},   // constant_id 0 -> NX
+        {1, sizeof(uint32_t), sizeof(uint32_t)}  // constant_id 1 -> NY
+    };
+    std::vector<uint8_t> bytes(2 * sizeof(uint32_t));
+    memcpy(bytes.data(), &params.nx, sizeof(uint32_t));
+    memcpy(bytes.data() + sizeof(uint32_t), &params.ny, sizeof(uint32_t));
+
+    vk::SpecializationInfo specInfo{};
+    specInfo.setMapEntries(mes)
+        .setData<uint8_t>(bytes);
+
     vk::PipelineShaderStageCreateInfo fragmentStage{};
     fragmentStage.setStage(vk::ShaderStageFlagBits::eFragment)
         .setModule(**frag_shader_module)
-        .setPName("main");
+        .setPName("main")
+        .setPSpecializationInfo(&specInfo);
 
     std::array stages = {vertexStage, fragmentStage};
 

@@ -17,8 +17,10 @@ public:
     std::unique_ptr<vk::raii::ShaderModule> LoadShader(const std::string& path) const;
 
     std::unique_ptr<vk::raii::Pipeline> CreateComputePipelineFromFile(
-        const vk::raii::PipelineLayout& layout,
-        const std::string& spv_path) const;
+        const vk::raii::PipelineLayout &layout,
+        const std::string &spv_path,
+        const std::vector<vk::SpecializationMapEntry> &mapEntries= {},
+        const std::vector<uint8_t> &data = {}) const;
 
     vk::raii::SurfaceKHR& surface() const { return *surface_; }
     vk::raii::PhysicalDevice& physical_device() { return physical_device_; }

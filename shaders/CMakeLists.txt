@@ -2,12 +2,11 @@ set(TARGET rtfs2d_shaders)
 
 set(SHADER_SOURCES
         advection.comp
-        compute.comp
         diverge.comp
         fullscreen.frag
         fullscreen.vert
-        jacobi.comp
-        pressure_bc.comp
+        diffusion.comp
+        poisson.comp
         project.comp
         vorticity.comp
 )
