@@ -43,8 +43,18 @@ float border_velocity(float vi, bool is_u, int edge, uint local) {
             return ((edge <= 1) == is_u) ? 0.0f : vi;
         case 2: // Velocity: 虚拟速度=预设值
             return is_u ? bc_u : bc_v;
-        case 3: // Pressure: 虚拟速度=边缘值 (零梯度)
+        case 3: { // Pressure: backflow prevention
+            bool is_normal = ((edge <= 1) == is_u);
+            if (is_normal) {
+                bool entering;
+                if (edge == 0) entering = (vi > 0.0);
+                else if (edge == 1) entering = (vi < 0.0);
+                else if (edge == 2) entering = (vi > 0.0);
+                else entering = (vi < 0.0);
+                if (entering) return 0.0;
+            }
             return vi;
+        }
     }
     return 0.0f;
 }

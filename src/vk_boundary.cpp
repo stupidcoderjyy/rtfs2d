@@ -18,7 +18,7 @@ BoundaryContext::BoundaryContext(DeviceManager& dm, const GridParams& gp) :
     h_buf_size_ = h_cell_count_ * kBufferUnitSize;
     v_buf_size_ = v_cell_count_ * kBufferUnitSize;
     for (int i = 0; i < 4; ++i) {
-        auto buf_size = i & 1 ? v_buf_size_ : h_buf_size_;
+        auto buf_size = i <= 1 ? v_buf_size_ : h_buf_size_;
         auto [type_buf, type_mem] = AllocateBuffer(
             dm_->device(),
             dm_->physical_device(),
@@ -48,8 +48,8 @@ void BoundaryContext::BeginSetBoundary() {
 
 void BoundaryContext::EndSetBoundary() {
     for (int d = 0; d < 4; ++d) {
-        uint32_t cell_count = d & 1 ? v_cell_count_ : h_cell_count_;
-        uint32_t buf_size = d & 1 ? v_buf_size_ : h_buf_size_;
+        uint32_t cell_count = d <= 1 ? v_cell_count_ : h_cell_count_;
+        uint32_t buf_size = d <= 1 ? v_buf_size_ : h_buf_size_;
         buffer_size_[d] = buf_size;
         //默认边界条件：无滑移墙壁
         std::vector<uint8_t> bytes(buf_size, 0);

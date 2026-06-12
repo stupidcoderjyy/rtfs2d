@@ -24,14 +24,10 @@ ComputeContext::ComputeContext(DeviceManager& dm, const GridParams& params):
     InitializeVortexField();
     fluid_solvers_ = std::make_unique<FluidSolvers>(dm, *this);
     boundary_ctx_->BeginSetBoundary();
-    for (float f = 0.1; f < 1; f += 0.1f) {
-        boundary_ctx_->SetBoundary(BoundaryDirection::kLeft, BoundaryType::kVelocity,
-            f, f + 0.05, 0.5f);
-        boundary_ctx_->SetBoundary(BoundaryDirection::kRight, BoundaryType::kVelocity,
-            f - 0.05, f, -0.5f);
-    }
+    boundary_ctx_->SetBoundary(BoundaryDirection::kLeft, BoundaryType::kVelocity,
+        0.495, 0.505, 5.0f);
     boundary_ctx_->SetBoundary(BoundaryDirection::kTop, BoundaryType::kPressure,
-    0.4,0.6);
+        0.4,0.6);
     boundary_ctx_->EndSetBoundary();
 }
 
@@ -143,13 +139,19 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::Queue& queue, const
     AddBufferMemoryWriteReadBarrier(cb, 1);
     fluid_solvers_->SolveAdvection(cb, DescriptorSetAt(kSetAdvection));
 
+    // 涡量约束
+    // [0(u), 1(v), 2, 3, 4]
+    AddBufferMemoryWriteReadBarrier(cb, 0);
+    AddBufferMemoryWriteReadBarrier(cb, 1);
+    fluid_solvers_->SolveVorticity(cb, DescriptorSetAt(kSetVorticity), 0.5f);
+
     // 扩散迭代（u 和 v 各做一次雅可比迭代）
     float viscosity = 0.0f;
     float dx = grid_params_.dx;
     float alpha = viscosity * 0.016f / (dx * dx);
     float beta = 4.0f + alpha;
     // 必须是奇数次迭代，否则无法把u、v换到前两个缓冲中
-    for (int iter = 0; iter < 1; ++iter) {
+    for (int iter = 0; iter < 21; ++iter) {
         if (iter & 1) {
             // [0(u), 1(v), 2, 3, 4]
             AddBufferMemoryWriteReadBarrier(cb, 0);
@@ -173,7 +175,7 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::Queue& queue, const
 
     // 压力求解迭代（雅可比迭代解泊松方程）
     float alpha_p = -(dx * dx);
-    for (int iter = 0; iter < 40; ++iter) {
+    for (int iter = 0; iter < 50; ++iter) {
         float beta_p = 4.0f;
         if (iter & 1) {
             //[0(u), 1(v), 2(div), 3(pi), 4(po)]
@@ -187,12 +189,6 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::Queue& queue, const
             //[0(u), 1(v), 2(div), 3(pi), 4]
         }
     }
-
-    // 涡量约束
-    // [0(u), 1(v), 2, 3, 4]
-    AddBufferMemoryWriteReadBarrier(cb, 0);
-    AddBufferMemoryWriteReadBarrier(cb, 1);
-    fluid_solvers_->SolveVorticity(cb, DescriptorSetAt(kSetVorticity), 0.075f);
 
     // 压力投影
     // [0(u), 1(v), 2(div), 3, 4(p)]

@@ -9,14 +9,13 @@
 namespace rtfs2d {
 
 struct GridParams {
-    //网格结点数
+    //网格节点数
     int nx, ny;
-    //物理域尺寸
-    float lx, ly;
-    //五网格间距
-    float dx, dy;
+    //网格间距（单位域[0,1]x[0,1]）
+    float dx = 1.0f / static_cast<float>(nx);
+    float dy = 1.0f / static_cast<float>(ny);
 
-    GridParams(int nx, int ny, float lx, float ly);
+    GridParams(int nx, int ny);
 
     int Index(int i, int j) const {
         return i + j * nx;
@@ -24,6 +23,10 @@ struct GridParams {
 
     int TotalCells() const {
         return nx * ny;
+    }
+
+    int InteriorCells() const {
+        return (nx - 2) * (ny - 2);
     }
 };
 

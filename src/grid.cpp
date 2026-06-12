@@ -8,9 +8,7 @@
 
 using namespace rtfs2d;
 
-GridParams::GridParams(int nx, int ny, float lx, float ly): nx(nx), ny(ny), lx(lx), ly(ly) {
-    dx = lx / static_cast<float>(nx);
-    dy = ly / static_cast<float>(ny);
+GridParams::GridParams(int nx, int ny): nx(nx), ny(ny) {
 }
 
 ScalarField::ScalarField(const GridParams &params): params_(params) {
