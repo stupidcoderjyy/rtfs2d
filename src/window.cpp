@@ -46,10 +46,14 @@ void Window::Show() {
         // 主循环
         while (!glfwWindowShouldClose(window_)) {
             if (swapchain_ctx_->needs_recreate()) {
-                if (width_ == 0 || height_ == 0) {
-                    glfwWaitEvents();   //最小化时阻塞当前线程，恢复窗口后再重建交换链
-                } else {
-                    swapchain_ctx_->Recreate(width_, height_);
+                try {
+                    if (width_ == 0 || height_ == 0) {
+                        glfwWaitEvents();   //最小化时阻塞当前线程，恢复窗口后再重建交换链
+                    } else {
+                        swapchain_ctx_->Recreate(width_, height_);
+                    }
+                } catch (vk::OutOfDateKHRError&) {
+                    glfwWaitEvents();
                 }
                 continue;
             }
@@ -74,10 +78,11 @@ void Window::Show() {
             // acquire_sem用于GPU端图形队列和呈现队列之间进行同步，避免对未完成呈现（只读）的图片进行渲染（写）
             // GPU端最多只有kMaxFramesInFlight张图片处于未完成渲染的状态，acquire_sem和kMaxFramesInFlight绑定
             // 当呈现速度较慢时，会在这里阻塞
-            auto [res, img_idx] = swapchain_ctx_->AcquireImage(acquire_sem);
-            if (res == vk::Result::eErrorOutOfDateKHR) {
-                spdlog::warn("failed to acquire image from swapchain, try recreate swapchain");
-                swapchain_ctx_->Recreate(width_, height_);
+            uint32_t img_idx;
+            try {
+                img_idx = swapchain_ctx_->AcquireImage(acquire_sem).value;
+            } catch ([[maybe_unused]] const vk::OutOfDateKHRError& e) {
+                swapchain_ctx_->set_needs_recreate(true);
                 continue;
             }
 
@@ -97,8 +102,11 @@ void Window::Show() {
             device_manager_->graphics_queue().submit(si, *fence);
 
             // 将图像加入呈现队列。呈现和渲染是GPU中两个独立的模块，每张图片基于render_sem进行同步
-            if (auto pres_res = swapchain_ctx_->Present(device_manager_->present_queue(), img_idx, render_sem); pres_res != vk::Result::eSuccess) {
-                spdlog::warn("present returned: {}", static_cast<int>(pres_res));
+            try {
+                swapchain_ctx_->Present(device_manager_->present_queue(), img_idx, render_sem);
+            } catch (const vk::OutOfDateKHRError& e) {
+                spdlog::warn("present out of date", e.what());
+                swapchain_ctx_->set_needs_recreate(true);
             }
 
             // 更新帧索引

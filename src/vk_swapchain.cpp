@@ -63,6 +63,11 @@ void SwapchainContext::CreateSwapChain(int width, int height, bool replace) {
     // 查询 surface 的能力上限（最小/最大图像数量、当前窗口尺寸等）
     auto capabilities = device_manager_->physical_device().getSurfaceCapabilitiesKHR(*device_manager_->surface());
     vk::Extent2D ext = capabilities.currentExtent;  // 当前窗口尺寸
+
+    if (ext.width == 0 || ext.height == 0) {
+        throw vk::OutOfDateKHRError("failed to create swapchain: zero extent");
+    }
+
     // 若窗口系统不提供固定尺寸（currentExtent 为 UINT32_MAX），则用构造参数手动 clamp
     if (ext.width == UINT32_MAX) {
         ext.width = std::clamp(
