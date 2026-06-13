@@ -5,6 +5,8 @@ add_library(${TARGET} STATIC
         fluid_solvers.h
         grid.cpp
         grid.h
+        obstacle_geometry.cpp
+        obstacle_geometry.h
         pressure_bc_solver.cpp
         pressure_bc_solver.h
         vk_boundary.cpp
