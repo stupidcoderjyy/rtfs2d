@@ -6,7 +6,7 @@
 #include "vk_device.h"
 #include "vk_compute.h"
 
-using namespace rtfs2d;
+namespace rtfs2d {
 
 VorticitySolver::VorticitySolver(DeviceManager& dm, ComputeContext& cc): dm_(&dm), cc_(&cc) {
     vk::PushConstantRange push_range{};
@@ -38,3 +38,5 @@ void VorticitySolver::RecordCommands(const vk::raii::CommandBuffer& cb,
     int group_count = (cc_->cell_count() + 127) / 128;
     cb.dispatch(group_count, 1, 1);
 }
+
+}  // namespace rtfs2d

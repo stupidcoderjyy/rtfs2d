@@ -7,7 +7,7 @@
 #include "vk_swapchain.h"
 #include "vk_device.h"
 
-using namespace rtfs2d;
+namespace rtfs2d {
 
 SwapchainContext::SwapchainContext(DeviceManager &dm, int width, int height):
         device_manager_(&dm) {
@@ -226,3 +226,5 @@ void SwapchainContext::CreateImageBasedSyncObjects() {
         );
     }
 }
+
+}  // namespace rtfs2d

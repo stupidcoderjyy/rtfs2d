@@ -19,27 +19,27 @@ void ObstacleGeometry::AddObstacle(const std::vector<std::array<float, 2>>& poin
     obs.poly_vert_count = 0;
 
     // 复制顶点，最多 kMaxPolyVertexes 个
-    auto max_verts = static_cast<uint32_t>(kMaxPolyVertexes);
+    auto max_verts = static_cast<uint32_t>(kMaxPolyVerts);
     auto num_points = static_cast<uint32_t>(points.size());
     uint32_t copy_count = std::min(num_points, max_verts);
 
     for (uint32_t i = 0; i < copy_count; ++i) {
-        obs.poly_vertexes[i].x = points[i][0];
-        obs.poly_vertexes[i].y = points[i][1];
+        obs.poly_verts[i].x = points[i][0];
+        obs.poly_verts[i].y = points[i][1];
     }
     obs.poly_vert_count = copy_count;
 
     // 首尾闭合检测：如果首末点距离大于阈值，则追加首点
     if (copy_count >= 2) {
-        float x0 = obs.poly_vertexes[0].x;
-        float y0 = obs.poly_vertexes[0].y;
-        float xn = obs.poly_vertexes[copy_count - 1].x;
-        float yn = obs.poly_vertexes[copy_count - 1].y;
+        float x0 = obs.poly_verts[0].x;
+        float y0 = obs.poly_verts[0].y;
+        float xn = obs.poly_verts[copy_count - 1].x;
+        float yn = obs.poly_verts[copy_count - 1].y;
         float dx = x0 - xn;
         float dy = y0 - yn;
         if (float dist = std::sqrt(dx * dx + dy * dy); dist > 1e-6f && copy_count < max_verts) {
-            obs.poly_vertexes[copy_count].x = x0;
-            obs.poly_vertexes[copy_count].y = y0;
+            obs.poly_verts[copy_count].x = x0;
+            obs.poly_verts[copy_count].y = y0;
             obs.poly_vert_count = copy_count + 1;
         }
     }
@@ -67,8 +67,8 @@ void ObstacleGeometry::GenerateIBMMarkers(float h) {
 
         // 遍历每条边
         for (uint32_t k = 0; k + 1 < obs.poly_vert_count; ++k) {
-            const auto&[x0, y0] = obs.poly_vertexes[k];
-            const auto&[x1, y1] = obs.poly_vertexes[k + 1];
+            const auto&[x0, y0] = obs.poly_verts[k];
+            const auto&[x1, y1] = obs.poly_verts[k + 1];
 
             float dx = x1 - x0;
             float dy = y1 - y0;
@@ -126,8 +126,8 @@ std::vector<uint8_t> ObstacleGeometry::SerializePolygonSSBO() const {
     for (const auto& obs : obstacles_) {
         write_uint32(obs.poly_vert_count);
         for (uint32_t i = 0; i < obs.poly_vert_count; ++i) {
-            write_float(obs.poly_vertexes[i].x);
-            write_float(obs.poly_vertexes[i].y);
+            write_float(obs.poly_verts[i].x);
+            write_float(obs.poly_verts[i].y);
         }
     }
     return buffer;

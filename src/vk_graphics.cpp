@@ -13,7 +13,7 @@
 #include "vk_swapchain.h"
 #include "vk_compute.h"
 
-using namespace rtfs2d;
+namespace rtfs2d {
 
 GraphicsContext::GraphicsContext(DeviceManager& dm, SwapchainContext& sc, ComputeContext& cc) :
         dm_(&dm), sc_(&sc), cc_(&cc) {
@@ -186,3 +186,5 @@ void GraphicsContext::CreateGraphicsPipeline() {
         dm_->device().createGraphicsPipeline(nullptr, pipelineInfo)
     );
 }
+
+}  // namespace rtfs2d

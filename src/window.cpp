@@ -11,7 +11,7 @@
 #include "window.h"
 #include "vk_memory.h"
 
-using namespace rtfs2d;
+namespace rtfs2d {
 
 Window::Window(int width, int height, std::string title, bool debug_enabled):
         width_(width), height_(height), title_(std::move(title)), debug_enabled_(debug_enabled) {}
@@ -112,3 +112,5 @@ void Window::Show() {
         throw;
     }
 }
+
+}  // namespace rtfs2d

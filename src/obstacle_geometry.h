@@ -12,9 +12,9 @@ namespace rtfs2d {
 
 class ObstacleGeometry {
 public:
-    static constexpr int kMaxObstacles = 16;
-    static constexpr int kMaxPolyVertexes = 64;
-    static constexpr int kMaxIBMMarkers = 256;
+    static constexpr uint32_t kMaxObstacles = 16;
+    static constexpr uint32_t kMaxPolyVerts = 64;
+    static constexpr uint32_t kMaxIBMMarkers = 256;
 
     struct PolyVert {
         float x, y;
@@ -23,7 +23,7 @@ public:
     //内部结构
     struct Obstacle {
         uint32_t poly_vert_count;
-        PolyVert poly_vertexes[64];
+        PolyVert poly_verts[64];
     };
 
     //拉格朗日标记点

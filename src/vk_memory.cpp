@@ -4,6 +4,9 @@
 
 #include "vk_memory.h"
 
+
+namespace rtfs2d {
+
 uint32_t rtfs2d::FindMemoryType(
         vk::PhysicalDevice physical_device,
         uint32_t typeFilter,
@@ -41,3 +44,5 @@ rtfs2d::BufferAndMemory rtfs2d::AllocateBuffer(
     buffer->bindMemory(*memory, 0);
     return {std::move(buffer), std::move(memory)};
 }
+
+}  // namespace rtfs2d

@@ -9,7 +9,7 @@
 #include "vk_device.h"
 #include "vk_memory.h"
 
-using namespace rtfs2d;
+namespace rtfs2d {
 
 BoundaryContext::BoundaryContext(DeviceManager& dm, const GridParams& gp) :
         dm_(&dm), grid_params_(gp) {
@@ -71,3 +71,5 @@ void BoundaryContext::EndSetBoundary() {
             dm_->graphics_queue(), bytes, *buffer_bc_info_[d]);
     }
 }
+
+}  // namespace rtfs2d

@@ -7,8 +7,7 @@
 #include "vk_device.h"
 #include "vk_compute.h"
 
-using namespace rtfs2d;
-
+namespace rtfs2d {
 FluidSolvers::FluidSolvers(DeviceManager &dm, ComputeContext &cc): dm_(&dm), cc_(&cc) {
     pipeline_advection_ = CreateSolverPipeline("shaders/advection.comp.spv");
     pipeline_divergence_ = CreateSolverPipeline("shaders/diverge.comp.spv");
@@ -142,3 +141,5 @@ void FluidSolvers::CreateVorticitySolverPipeline() {
     pipeline_vorticity_ = dm_->CreateComputePipelineFromFile(
         *pipeline_layout_vorticity_, "shaders/vorticity.comp.spv");
 }
+
+}  // namespace rtfs2d

@@ -11,7 +11,7 @@
 #include "vk_device.h"
 #include "vk_memory.h"
 
-using namespace rtfs2d;
+namespace rtfs2d {
 
 ComputeContext::ComputeContext(DeviceManager& dm, const GridParams& params):
         dm_(&dm), grid_params_(params),
@@ -362,3 +362,5 @@ void ComputeContext::DebugReadBackBoundaryBuffer(BoundaryDirection d) const {
         spdlog::debug(msg);
     });
 }
+
+}  // namespace rtfs2d

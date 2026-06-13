@@ -8,7 +8,7 @@
 #include <set>
 #include <spdlog/spdlog.h>
 
-using namespace rtfs2d;
+namespace rtfs2d {
 
 DeviceManager::DeviceManager(GLFWwindow *window, bool debug_enabled): debug_enabled_(debug_enabled) {
     CreateVkInstance();
@@ -292,3 +292,5 @@ void DeviceManager::CreateComputeCommandPool() {
     compute_command_pool_ = std::make_unique<vk::raii::CommandPool>(
         device_->createCommandPool(cp_ci));
 }
+
+}  // namespace rtfs2d

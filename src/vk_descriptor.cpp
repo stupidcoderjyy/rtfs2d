@@ -4,7 +4,7 @@
 
 #include "vk_descriptor.h"
 
-using namespace rtfs2d;
+namespace rtfs2d {
 
 DescriptorSetBuilder::DescriptorSetBuilder(const vk::raii::Device& device)
     : device_(&device) {}
@@ -67,3 +67,5 @@ void DescriptorSetBuilder::WriteBuffer(const vk::raii::DescriptorSet& set,
         .setPBufferInfo(&bi);
     device_->updateDescriptorSets(wds, nullptr);
 }
+
+}  // namespace rtfs2d

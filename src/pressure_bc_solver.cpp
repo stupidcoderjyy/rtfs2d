@@ -6,7 +6,7 @@
 #include "vk_device.h"
 #include "vk_compute.h"
 
-using namespace rtfs2d;
+namespace rtfs2d {
 
 PressureBCSolver::PressureBCSolver(DeviceManager& dm, ComputeContext& cc)
     : dm_(&dm), cc_(&cc) {
@@ -23,3 +23,5 @@ void PressureBCSolver::RecordCommands(const vk::raii::CommandBuffer& cb,
     int group_count = (cc_->cell_count() + 127) / 128; // 128 = local_size_x
     cb.dispatch(group_count, 1, 1);
 }
+
+}  // namespace rtfs2d
