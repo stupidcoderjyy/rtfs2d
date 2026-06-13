@@ -7,7 +7,7 @@
 
 namespace rtfs2d {
 
-uint32_t rtfs2d::FindMemoryType(
+uint32_t FindMemoryType(
         vk::PhysicalDevice physical_device,
         uint32_t typeFilter,
         vk::MemoryPropertyFlags properties) {
@@ -20,7 +20,7 @@ uint32_t rtfs2d::FindMemoryType(
     throw std::runtime_error("failed to find suitable memory type");
 }
 
-rtfs2d::BufferAndMemory rtfs2d::AllocateBuffer(
+BufferAndMemory AllocateBuffer(
         const vk::raii::Device &device,
         vk::PhysicalDevice physical_device,
         vk::DeviceSize size,

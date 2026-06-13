@@ -8,6 +8,8 @@
 #include <vulkan/vulkan_raii.hpp>
 #include <GLFW/glfw3.h>
 
+#include "vk_memory.h"
+
 namespace rtfs2d {
 
 class DeviceManager {
@@ -21,6 +23,18 @@ public:
         const std::string &spv_path,
         const std::vector<vk::SpecializationMapEntry> &mapEntries= {},
         const std::vector<uint8_t> &data = {}) const;
+
+    BufferAndMemory AllocateDeviceBuffer(
+            vk::DeviceSize size,
+            vk::BufferUsageFlags usage,
+            vk::MemoryPropertyFlags memory_flags) const {
+        return AllocateBuffer(*device_, physical_device_, size, usage, memory_flags);
+    }
+
+    template<typename T>
+    void UploadDeviceBufferData(const std::vector<T> &data, const vk::raii::Buffer &dst_buffer) {
+        UploadBufferData(*device_, physical_device_, *command_pool_, *graphics_queue_, data, dst_buffer);
+    }
 
     vk::raii::SurfaceKHR& surface() const { return *surface_; }
     vk::raii::PhysicalDevice& physical_device() { return physical_device_; }

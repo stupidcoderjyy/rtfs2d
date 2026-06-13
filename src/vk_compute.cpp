@@ -19,6 +19,7 @@ ComputeContext::ComputeContext(DeviceManager& dm, const GridParams& params):
         compute_buf_size_(compute_cell_count_ * sizeof(float)) {
     boundary_ctx_ = std::make_unique<BoundaryContext>(dm, params);
     CreateVelocityBuffers();
+    CreateObstacleBuffers();
     CreateDescriptorSets();
     CreatePipelineLayout();
     InitializeVortexField();
@@ -64,32 +65,84 @@ void ComputeContext::AddBufferMemoryWriteReadBarrier(
         {}, nullptr, {barrier}, nullptr);
 }
 
+void ComputeContext::UploadObstacles(const ObstacleGeometry &geom) const {
+    // 1. 上传多边形数据
+    std::vector<uint8_t> poly_data = geom.SerializePolygonSSBO();
+    if (poly_data.size() > kPolygonBufferMaxSize) {
+        // 根据需要处理截断或报错
+        poly_data.resize(kPolygonBufferMaxSize);
+    }
+    dm_->UploadDeviceBufferData(poly_data, *polygon_buffer_);
+
+    // 2. 构建完整标记缓冲区（含 fx,fy,vx,vy 零字段）
+    uint32_t marker_count = geom.IBMMarkerCount();
+    const auto* markers = geom.IBMMarkerData();
+
+    // 缓冲区布局：4字节计数 + 每个标记 6 个 float (x,y,fx,fy,vx,vy)
+    size_t buffer_size = 4 + marker_count * 6 * 4;
+    if (buffer_size > kMarkerBufferMaxSize) {
+        buffer_size = kMarkerBufferMaxSize;
+        marker_count = (buffer_size - 4) / 24;
+    }
+
+    std::vector<uint8_t> marker_data;
+    marker_data.reserve(buffer_size);
+
+    // 写入计数（小端序）
+    auto* count_bytes = reinterpret_cast<const uint8_t*>(&marker_count);
+    marker_data.insert(marker_data.end(), count_bytes, count_bytes + 4);
+
+    // 写入每个标记的 x,y,fx=0,fy=0,vx=0,vy=0
+    for (uint32_t k = 0; k < marker_count; ++k) {
+        // x
+        float x = markers[k].x;
+        auto* x_bytes = reinterpret_cast<const uint8_t*>(&x);
+        marker_data.insert(marker_data.end(), x_bytes, x_bytes + 4);
+        // y
+        float y = markers[k].y;
+        auto* y_bytes = reinterpret_cast<const uint8_t*>(&y);
+        marker_data.insert(marker_data.end(), y_bytes, y_bytes + 4);
+        // fx, fy, vx, vy 均为 0.0f
+        float zero = 0.0f;
+        auto* zero_bytes = reinterpret_cast<const uint8_t*>(&zero);
+        for (int i = 0; i < 4; ++i) {
+            marker_data.insert(marker_data.end(), zero_bytes, zero_bytes + 4);
+        }
+    }
+
+    // 如果实际缓冲区更大，剩余部分保持零（已通过初始化保证，无需额外填充）
+    dm_->UploadDeviceBufferData(marker_data, *marker_buffer_);
+}
+
 void ComputeContext::CreateVelocityBuffers() {
-    velocity_buffers_.resize(kBindingsSize);
-    velocity_memories_.resize(kBindingsSize);
+    constexpr int kVelocityBuffers = 5;
+    velocity_buffers_.resize(kVelocityBuffers);
+    velocity_memories_.resize(kVelocityBuffers);
     std::vector host_data(compute_cell_count_, 0.0f);
-    for (int i = 0; i < kBindingsSize; ++i) {
-        auto [buf, mem] = AllocateBuffer(dm_->device(), dm_->physical_device(), compute_buf_size_,
+    for (int i = 0; i < kVelocityBuffers; ++i) {
+        auto [buf, mem] = dm_->AllocateDeviceBuffer(compute_buf_size_,
             vk::BufferUsageFlagBits::eStorageBuffer
                 | vk::BufferUsageFlagBits::eTransferSrc
                 | vk::BufferUsageFlagBits::eTransferDst,
                 vk::MemoryPropertyFlagBits::eDeviceLocal);
         velocity_buffers_[i] = std::move(buf);
         velocity_memories_[i] = std::move(mem);
-        UploadBufferData(dm_->device(), dm_->physical_device(), dm_->command_pool(),
-            dm_->graphics_queue(), host_data, *velocity_buffers_[i]);
+        dm_->UploadDeviceBufferData(host_data, *velocity_buffers_[i]);
     }
 }
 
 void ComputeContext::CreateDescriptorSets() {
     DescriptorSetBuilder dsb(dm_->device());
-    for (int i = 0; i < kBindingsSize; ++i) {
-        if (i < 5) {
-            dsb.AddStorageBufferBinding(i, vk::ShaderStageFlagBits::eCompute
-                | vk::ShaderStageFlagBits::eFragment);
-        } else {
-            dsb.AddStorageBufferBinding(i, vk::ShaderStageFlagBits::eCompute);
-        }
+    for (int i = 0; i < 5; ++i) {
+        dsb.AddStorageBufferBinding(i,
+            vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eFragment);
+    }
+    for (int i = 5; i < 9; ++i) {
+        dsb.AddStorageBufferBinding(i, vk::ShaderStageFlagBits::eCompute);
+    }
+    for (int i = 9; i < 11; ++i) {
+        dsb.AddStorageBufferBinding(i,
+            vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eFragment);
     }
     std::vector<std::vector<int>> sets_registry{
         {kSetAdvection,      0, 0 /* u_src */, 1, 1 /* v_src */, 2, 2 /* u_dst */, 3, 3 /* v_dst */},
@@ -119,6 +172,8 @@ void ComputeContext::CreateDescriptorSets() {
         dsb.WriteBuffer(*set, 6, boundary_ctx_->BufferAt(BoundaryDirection::kRight));
         dsb.WriteBuffer(*set, 7, boundary_ctx_->BufferAt(BoundaryDirection::kBottom));
         dsb.WriteBuffer(*set, 8, boundary_ctx_->BufferAt(BoundaryDirection::kTop));
+        dsb.WriteBuffer(*set, 9, *polygon_buffer_);
+        dsb.WriteBuffer(*set, 10, *marker_buffer_);
     }
 }
 
@@ -239,10 +294,8 @@ void ComputeContext::InitializeVortexField() const {
             v_data[k] += w2 *  dx2;
         }
     }*/
-    UploadBufferData(dm_->device(), dm_->physical_device(), dm_->command_pool(),
-        dm_->graphics_queue(), u_data, BufferAt(0));
-    UploadBufferData(dm_->device(), dm_->physical_device(), dm_->command_pool(),
-        dm_->graphics_queue(), v_data, BufferAt(1));
+    dm_->UploadDeviceBufferData(u_data, BufferAt(0));
+    dm_->UploadDeviceBufferData(v_data, BufferAt(1));
 }
 
 void ComputeContext::DebugReadBackBuffer(const vk::raii::Buffer &buf,
@@ -361,6 +414,30 @@ void ComputeContext::DebugReadBackBoundaryBuffer(BoundaryDirection d) const {
         }
         spdlog::debug(msg);
     });
+}
+
+void ComputeContext::CreateObstacleBuffers() {
+    // 创建多边形 SSBO
+    auto [buf1, mem1] = dm_->AllocateDeviceBuffer(
+        kPolygonBufferMaxSize,
+        vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+        vk::MemoryPropertyFlagBits::eDeviceLocal);
+    polygon_buffer_ = std::move(buf1);
+    polygon_memory_ = std::move(mem1);
+
+    // 创建标记 SSBO
+    auto [buf2, mem2] = dm_->AllocateDeviceBuffer(
+        kMarkerBufferMaxSize,
+        vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+        vk::MemoryPropertyFlagBits::eDeviceLocal);
+    marker_buffer_ = std::move(buf2);
+    marker_memory_ = std::move(mem2);
+
+    // 初始化为零
+    std::vector<uint8_t> zero_poly(kPolygonBufferMaxSize, 0);
+    std::vector<uint8_t> zero_marker(kMarkerBufferMaxSize, 0);
+    dm_->UploadDeviceBufferData(zero_poly, *polygon_buffer_);
+    dm_->UploadDeviceBufferData(zero_marker, *marker_buffer_);
 }
 
 }  // namespace rtfs2d

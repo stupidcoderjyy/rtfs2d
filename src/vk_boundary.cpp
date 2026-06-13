@@ -19,16 +19,13 @@ BoundaryContext::BoundaryContext(DeviceManager& dm, const GridParams& gp) :
     v_buf_size_ = v_cell_count_ * kBufferUnitSize;
     for (int i = 0; i < 4; ++i) {
         auto buf_size = i <= 1 ? v_buf_size_ : h_buf_size_;
-        auto [type_buf, type_mem] = AllocateBuffer(
-            dm_->device(),
-            dm_->physical_device(),
+        auto [type_buf, type_mem] = dm_->AllocateDeviceBuffer(
             buf_size,
             vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal);
         //默认边界条件：无滑移墙壁
         std::vector<uint8_t> initial(buf_size, 0); // kNoSlipWall + 0.0f + 0.0f
-        UploadBufferData(dm_->device(), dm_->physical_device(), dm_->command_pool(),
-            dm_->graphics_queue(), initial, *type_buf);
+        dm_->UploadDeviceBufferData(initial, *type_buf);
         buffer_bc_info_[i] = std::move(type_buf);
         memory_bc_info_[i] = std::move(type_mem);
     }
@@ -67,8 +64,7 @@ void BoundaryContext::EndSetBoundary() {
                 off += kBufferUnitSize;
             }
         }
-        UploadBufferData(dm_->device(), dm_->physical_device(), dm_->command_pool(),
-            dm_->graphics_queue(), bytes, *buffer_bc_info_[d]);
+        dm_->UploadDeviceBufferData(bytes, *buffer_bc_info_[d]);
     }
 }
 
