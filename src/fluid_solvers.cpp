@@ -8,6 +8,7 @@
 #include "vk_compute.h"
 
 namespace rtfs2d {
+
 FluidSolvers::FluidSolvers(DeviceManager &dm, ComputeContext &cc): dm_(&dm), cc_(&cc) {
     pipeline_advection_ = CreateSolverPipeline("shaders/advection.comp.spv");
     pipeline_divergence_ = CreateSolverPipeline("shaders/diverge.comp.spv");
@@ -96,6 +97,14 @@ void FluidSolvers::SolveIBMSpread(const vk::raii::CommandBuffer &cb, const vk::r
 
 void FluidSolvers::SolveIBMApplyForce(const vk::raii::CommandBuffer &cb, const vk::raii::DescriptorSet &ds) const {
     cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_ibm_apply_force_);
+    cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *cc_->pipeline_layout(),
+        0, *ds, nullptr);
+    int group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
+    cb.dispatch(group_count, 1, 1);
+}
+
+void FluidSolvers::PrecomputeIBMMask(const vk::raii::CommandBuffer &cb, const vk::raii::DescriptorSet &ds) const {
+    cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_ibm_mask_);
     cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *cc_->pipeline_layout(),
         0, *ds, nullptr);
     int group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;

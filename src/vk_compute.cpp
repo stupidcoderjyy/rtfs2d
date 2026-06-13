@@ -16,8 +16,7 @@ namespace rtfs2d {
 ComputeContext::ComputeContext(DeviceManager& dm, const GridParams& params):
         dm_(&dm), grid_params_(params),
         compute_cell_count_(params.TotalCells()),
-        compute_buf_size_(compute_cell_count_ * sizeof(float)),
-        force_accum_buf_size_(2 * compute_cell_count_ * sizeof(float)) {
+        compute_buf_size_(compute_cell_count_ * sizeof(float)) {
     boundary_ctx_ = std::make_unique<BoundaryContext>(dm, params);
     CreateBuffers();
     CreateDescriptorSets();
@@ -108,6 +107,22 @@ void ComputeContext::UploadObstacles(const ObstacleGeometry &geom) {
 
     // 如果实际缓冲区更大，剩余部分保持零（已通过初始化保证，无需额外填充）
     dm_->InitBuffer(buffers::kBufIbmMarker, marker_data);
+
+    // 预计算障碍掩码
+    vk::CommandBufferAllocateInfo ai{};
+    ai.setCommandPool(dm_->compute_command_pool())
+        .setCommandBufferCount(1)
+        .setLevel(vk::CommandBufferLevel::ePrimary);
+    auto cbs = dm_->device().allocateCommandBuffers(ai);
+    auto& cb = cbs[0];
+    auto queue = dm_->graphics_queue();
+    cb.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+    fluid_solvers_->PrecomputeIBMMask(cb, DescriptorSetAt(kSetImbMask)); //描述符集随便选一个即可
+    cb.end();
+    vk::SubmitInfo si{};
+    si.setCommandBuffers(*cb);
+    queue.submit(si);
+    queue.waitIdle();
 }
 
 void ComputeContext::CreateBuffers() const {
@@ -127,13 +142,17 @@ void ComputeContext::CreateBuffers() const {
     dm_->CreateBuffer(buffers::kBufIbmMarker, ObstacleGeometry::kMarkerBufferSize,
         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eDeviceLocal);
-    dm_->CreateBuffer(buffers::kBufIbmAccum, 2 * compute_cell_count_ * sizeof(float),
+    dm_->CreateBuffer(buffers::kBufIbmForce, 2 * compute_cell_count_ * sizeof(float),
+        vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+        vk::MemoryPropertyFlagBits::eDeviceLocal);
+    dm_->CreateBuffer(buffers::kBufIbmMask, 2 * compute_cell_count_ * sizeof(float),
         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eDeviceLocal);
     // 初始化为零
     dm_->InitBuffer<uint8_t>(buffers::kBufIbmPolygon, 0);
     dm_->InitBuffer<uint8_t>(buffers::kBufIbmMarker, 0);
-    dm_->InitBuffer<uint8_t>(buffers::kBufIbmAccum, 0);
+    dm_->InitBuffer<uint8_t>(buffers::kBufIbmForce, 0);
+    dm_->InitBuffer<uint8_t>(buffers::kBufIbmMask, 0);
 }
 
 void ComputeContext::CreateDescriptorSets() {
@@ -150,65 +169,102 @@ void ComputeContext::CreateDescriptorSets() {
             vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eFragment);
     }
     dsb.AddStorageBufferBinding(11, vk::ShaderStageFlagBits::eCompute);
+    dsb.AddStorageBufferBinding(12, vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eFragment);
 
     std::vector<std::vector<int>> field_reg{
         {kSetAdvection,
             0, buffers::kBufV0 /* u_src */,
             1, buffers::kBufV1 /* v_src */,
             2, buffers::kBufV2 /* u_dst */,
-            3, buffers::kBufV3 /* v_dst */
+            3, buffers::kBufV3 /* v_dst */,
+            5, buffers::kBufBc0,
+            6, buffers::kBufBc1,
+            7, buffers::kBufBc2,
+            8, buffers::kBufBc3,
         },{kSetVorticity,
             0, buffers::kBufV0 /* u_src */,
-            1, buffers::kBufV1 /* v_src */
+            1, buffers::kBufV1 /* v_src */,
+            5, buffers::kBufBc0,
+            6, buffers::kBufBc1,
+            7, buffers::kBufBc2,
+            8, buffers::kBufBc3,
         },{kSetDiffusionEven,
             0, buffers::kBufV2 /* u_src */,
             1, buffers::kBufV3 /* v_src */,
             2, buffers::kBufV0 /* u_dst */,
-            3, buffers::kBufV1 /* v_dst */
+            3, buffers::kBufV1 /* v_dst */,
+            5, buffers::kBufBc0,
+            6, buffers::kBufBc1,
+            7, buffers::kBufBc2,
+            8, buffers::kBufBc3,
         },{kSetDiffusionOdd,
             0, buffers::kBufV0 /* u_src */,
             1, buffers::kBufV1 /* v_src */,
             2, buffers::kBufV2 /* u_dst */,
-            3, buffers::kBufV3 /* v_dst */
+            3, buffers::kBufV3 /* v_dst */,
+            5, buffers::kBufBc0,
+            6, buffers::kBufBc1,
+            7, buffers::kBufBc2,
+            8, buffers::kBufBc3,
         },{kSetDivergence,
             0, buffers::kBufV0 /* u_src */,
             1, buffers::kBufV1 /* v_src */,
-            2, buffers::kBufV2 /*  div  */
+            2, buffers::kBufV2 /*  div  */,
+            5, buffers::kBufBc0,
+            6, buffers::kBufBc1,
+            7, buffers::kBufBc2,
+            8, buffers::kBufBc3,
         },{kSetPressureEven,
             0, buffers::kBufV0 /* u_src */,
             1, buffers::kBufV1 /* v_src */,
             2, buffers::kBufV2 /*  div  */,
             3, buffers::kBufV4 /*  pi   */,
-            4, buffers::kBufV3 /*  po   */
+            4, buffers::kBufV3 /*  po   */,
+            5, buffers::kBufBc0,
+            6, buffers::kBufBc1,
+            7, buffers::kBufBc2,
+            8, buffers::kBufBc3,
         },{kSetPressureOdd,
             0, buffers::kBufV0 /* u_src */,
             1, buffers::kBufV1 /* v_src */,
             2, buffers::kBufV2 /*  div  */,
             3, buffers::kBufV3 /*  pi   */,
-            4, buffers::kBufV4 /*  po   */
+            4, buffers::kBufV4 /*  po   */,
+            5, buffers::kBufBc0,
+            6, buffers::kBufBc1,
+            7, buffers::kBufBc2,
+            8, buffers::kBufBc3,
         },{kSetProjection,
             0, buffers::kBufV0 /* u_src */,
             1, buffers::kBufV1 /* v_src */,
-            2, buffers::kBufV4 /*   p   */
-        },
-    };
-    std::vector common_reg = {
-        5, buffers::kBufBc0,
-        6, buffers::kBufBc1,
-        7, buffers::kBufBc2,
-        8, buffers::kBufBc3,
-        9, buffers::kBufIbmPolygon,
-        10, buffers::kBufIbmMarker,
-        11, buffers::kBufIbmAccum
+            2, buffers::kBufV4 /*   p   */,
+            5, buffers::kBufBc0,
+            6, buffers::kBufBc1,
+            7, buffers::kBufBc2,
+            8, buffers::kBufBc3,
+        }, {kSetImbApplyForce,
+            0, buffers::kBufV0 /* u_src */,
+            1, buffers::kBufV1 /* v_src */,
+            11, buffers::kBufIbmForce,
+        }, {kSetImbInterpolate,
+            0, buffers::kBufV0 /* u_src */,
+            1, buffers::kBufV1 /* v_src */,
+            10, buffers::kBufIbmMarker,
+        }, {kSetImbMask,
+            9, buffers::kBufIbmPolygon,
+            12, buffers::kBufIbmMask,
+        }, {kSetVisualization,
+            0, buffers::kBufV0 /* u_src */,
+            1, buffers::kBufV1 /* v_src */,
+            2, buffers::kBufV4 /*   p   */,
+            12, buffers::kBufIbmMask,
+        }
     };
     auto [ds_layout, ds_pool, ds_sets] = dsb.build(field_reg.size());
     descriptor_set_layout_ = std::move(ds_layout);
     descriptor_pool_ = std::move(ds_pool);
     descriptor_sets_ = std::move(ds_sets);
-    for (auto& sr : field_reg) {
-        for (int reg : common_reg) {
-            sr.push_back(reg);
-        }
+    for (const auto& sr : field_reg) {
         auto it = sr.begin();
         int set_idx = *it++;
         auto& set = descriptor_sets_[set_idx];

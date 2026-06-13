@@ -12,6 +12,7 @@ set(SHADER_SOURCES
         ibm_interpolate.comp
         ibm_spread_markers.comp
         ibm_apply_force.comp
+        ibm_mask.comp
 )
 
 find_program(GLSLC glslc HINTS "${LIB_PREFIX_PATH}/bin")

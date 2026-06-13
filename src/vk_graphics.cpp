@@ -68,7 +68,7 @@ void GraphicsContext::RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t
     // 将存储缓冲绑定到图形管线
     cb.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
         **graphics_pipeline_layout_, 0,
-        *cc_->DescriptorSetAt(ComputeContext::kSetProjection), nullptr);
+        *cc_->DescriptorSetAt(ComputeContext::kSetVisualization), nullptr);
 
     // 绘制全屏三角形（3个顶点）
     cb.draw(3, 1, 0, 0);

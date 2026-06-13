@@ -20,7 +20,8 @@ constexpr int kBufBc3 = 8;  //Top
 
 constexpr int kBufIbmPolygon = 9;
 constexpr int kBufIbmMarker = 10;
-constexpr int kBufIbmAccum = 11;
+constexpr int kBufIbmForce = 11;
+constexpr int kBufIbmMask = 12;
 
 }
 

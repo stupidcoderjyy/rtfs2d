@@ -31,6 +31,10 @@ public:
         kSetPressureEven,      // 压力求解偶次迭代
         kSetPressureOdd,       // 压力求解奇次迭代
         kSetProjection,        // 压力投影修正速度
+        kSetImbApplyForce,
+        kSetImbInterpolate,
+        kSetImbMask,
+        kSetVisualization      // 可视化
     };
 
     void AddBufferMemoryWriteReadBarrier(const vk::raii::CommandBuffer& cb, int buf) const;
@@ -51,8 +55,8 @@ public:
     uint32_t ibm_marker_count() const { return ibm_marker_count_; }
 private:
     DeviceManager* dm_;
-    // v0, v1, v2, v3, v4, bc1, bc2, bc3, bc4, poly, marker, force
-    static constexpr int kBindingsSize = 12;
+    // v0, v1, v2, v3, v4, bc1, bc2, bc3, bc4, poly, marker, force, mask
+    static constexpr int kBindingsSize = 13;
     std::unique_ptr<vk::raii::DescriptorSetLayout> descriptor_set_layout_;
     std::unique_ptr<vk::raii::PipelineLayout> pipeline_layout_;
     std::unique_ptr<vk::raii::DescriptorPool> descriptor_pool_;
@@ -63,7 +67,6 @@ private:
     const vk::DeviceSize compute_buf_size_;
     std::unique_ptr<BoundaryContext> boundary_ctx_;
     uint32_t ibm_marker_count_{};
-    const vk::DeviceSize force_accum_buf_size_;
 
     void CreateBuffers() const;
     void CreateDescriptorSets();
