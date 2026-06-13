@@ -79,7 +79,7 @@ void ComputeContext::CreateBuffers() const {
     dm_->CreateBuffer(buffers::kBufIbmPolygon, ObstacleGeometry::kPolygonBufferSize,
         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eDeviceLocal);
-    dm_->CreateBuffer(buffers::kBufIbmMarker, ObstacleGeometry::kMarkerBufferSize,
+    dm_->CreateBuffer(buffers::kBufIbmMarker, ObstacleGeometry::kMarkBufferSize,
         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eDeviceLocal);
     dm_->CreateBuffer(buffers::kBufIbmForce, 2 * compute_cell_count_ * sizeof(float),
@@ -182,17 +182,20 @@ void ComputeContext::CreateDescriptorSets() {
             6, buffers::kBufBc1,
             7, buffers::kBufBc2,
             8, buffers::kBufBc3,
-        }, {kSetImbApplyForce,
+        }, {kSetIbmApplyForce,
             0, buffers::kBufV0 /* u_src */,
             1, buffers::kBufV1 /* v_src */,
             11, buffers::kBufIbmForce,
-        }, {kSetImbInterpolate,
+        }, {kSetIbmInterpolate,
             0, buffers::kBufV0 /* u_src */,
             1, buffers::kBufV1 /* v_src */,
             10, buffers::kBufIbmMarker,
-        }, {kSetImbMask,
+        }, {kSetIbmMask,
             9, buffers::kBufIbmPolygon,
             12, buffers::kBufIbmMask,
+        }, {kSetIbmSpreadMarkers,
+            10, buffers::kBufIbmMarker,
+            11, buffers::kBufIbmForce,
         }, {kSetVisualization,
             0, buffers::kBufV0 /* u_src */,
             1, buffers::kBufV1 /* v_src */,
@@ -337,49 +340,9 @@ void ComputeContext::InitializeVortexField() const {
     dm_->UploadDeviceBufferData(v_data, dm_->BufferAt(buffers::kBufV1));
 }
 
-void ComputeContext::UploadObstacles(const ObstacleGeometry &geom) {
-    // 1. 上传多边形数据
-    std::vector<uint8_t> poly_data = geom.SerializePolygonSSBO();
-    if (poly_data.size() > ObstacleGeometry::kPolygonBufferSize) {
-        throw std::runtime_error("poly_data size too large");
-    }
-    dm_->InitBuffer(buffers::kBufIbmPolygon, poly_data);
-
-    // 2. 构建完整标记缓冲区（含 fx,fy,vx,vy 零字段）
-    ibm_marker_count_ = geom.ibm_markers().size();
-    const auto* markers = geom.ibm_markers().data();
-    // 缓冲区布局：4字节计数 + 每个标记 6 个 float (x,y,fx,fy,vx,vy)
-    size_t buffer_size = 4 + ibm_marker_count_ * 6 * 4;
-    if (buffer_size > ObstacleGeometry::kMarkerBufferSize) {
-        throw std::runtime_error("too many markers");
-    }
-    std::vector<uint8_t> marker_data;
-    marker_data.reserve(buffer_size);
-
-    // 写入计数（小端序）
-    auto* count_bytes = reinterpret_cast<const uint8_t*>(&ibm_marker_count_);
-    marker_data.insert(marker_data.end(), count_bytes, count_bytes + 4);
-
-    // 写入每个标记的 x,y,fx=0,fy=0,vx=0,vy=0
-    for (uint32_t k = 0; k < ibm_marker_count_; ++k) {
-        // x
-        float x = markers[k].x;
-        auto* x_bytes = reinterpret_cast<const uint8_t*>(&x);
-        marker_data.insert(marker_data.end(), x_bytes, x_bytes + 4);
-        // y
-        float y = markers[k].y;
-        auto* y_bytes = reinterpret_cast<const uint8_t*>(&y);
-        marker_data.insert(marker_data.end(), y_bytes, y_bytes + 4);
-        // fx, fy, vx, vy 均为 0.0f
-        float zero = 0.0f;
-        auto* zero_bytes = reinterpret_cast<const uint8_t*>(&zero);
-        for (int i = 0; i < 4; ++i) {
-            marker_data.insert(marker_data.end(), zero_bytes, zero_bytes + 4);
-        }
-    }
-
-    // 如果实际缓冲区更大，剩余部分保持零（已通过初始化保证，无需额外填充）
-    dm_->InitBuffer(buffers::kBufIbmMarker, marker_data);
+void ComputeContext::UploadObstacles(const ObstacleGeometry &geom) const {
+    dm_->InitBuffer(buffers::kBufIbmPolygon, geom.SerializePolygonSSBO());
+    dm_->InitBuffer(buffers::kBufIbmMarker, geom.SerializeMarkerSSBO());
 
     // 预计算障碍掩码
     vk::CommandBufferAllocateInfo ai{};
@@ -390,7 +353,7 @@ void ComputeContext::UploadObstacles(const ObstacleGeometry &geom) {
     auto& cb = cbs[0];
     auto queue = dm_->graphics_queue();
     cb.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-    fluid_solvers_->PrecomputeIBMMask(cb, DescriptorSetAt(kSetImbMask)); //描述符集随便选一个即可
+    fluid_solvers_->PrecomputeIBMMask(cb, DescriptorSetAt(kSetIbmMask)); //描述符集随便选一个即可
     cb.end();
     vk::SubmitInfo si{};
     si.setCommandBuffers(*cb);
@@ -519,13 +482,13 @@ void ComputeContext::DebugReadBackBoundaryBuffer(int buffer) const {
 void ComputeContext::AddDebugGeometry() {
     ObstacleGeometry geom;
     std::vector<std::array<float,2>> points;
-    for (int rad = 0; rad < M_PI; rad += 2 * M_PI / 32) {
+    for (float rad = 0; rad < 2 * M_PI; rad += M_PI / 16.0f) {
         float r =  0.12f;
         float y0 = 0.5f;
         float x0 = 0.5f;
         points.push_back({
-            static_cast<float>(x0 + r * std::cos(rad)),
-            static_cast<float>(y0 + r * std::sin(rad))
+            x0 + r * std::cos(rad),
+            y0 + r * std::sin(rad)
         });
     }
     geom.AddObstacle(points);

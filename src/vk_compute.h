@@ -31,9 +31,10 @@ public:
         kSetPressureEven,      // 压力求解偶次迭代
         kSetPressureOdd,       // 压力求解奇次迭代
         kSetProjection,        // 压力投影修正速度
-        kSetImbApplyForce,
-        kSetImbInterpolate,
-        kSetImbMask,
+        kSetIbmApplyForce,
+        kSetIbmInterpolate,
+        kSetIbmMask,
+        kSetIbmSpreadMarkers,
         kSetVisualization      // 可视化
     };
 
@@ -70,7 +71,7 @@ private:
     void CreatePipelineLayout();
     void RecordFluidStepCommands(const vk::raii::Queue& queue, const vk::raii::CommandBuffer& cb) const;
     void InitializeVortexField() const; // 初始化流场为涡旋场
-    void UploadObstacles(const ObstacleGeometry& geom);
+    void UploadObstacles(const ObstacleGeometry& geom) const;
 
     void DebugReadBackBuffer(const vk::raii::Buffer& buf, uint32_t size,
         const std::function<void(void* buf, uint32_t len)>& handler) const;

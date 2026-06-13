@@ -18,6 +18,7 @@ FluidSolvers::FluidSolvers(DeviceManager &dm, ComputeContext &cc): dm_(&dm), cc_
     pipeline_ibm_interpolate_ = CreateSolverPipeline("shaders/ibm_interpolate.comp.spv");
     pipeline_ibm_spread_ = CreateSolverPipeline("shaders/ibm_spread_markers.comp.spv");
     pipeline_ibm_apply_force_ = CreateSolverPipeline("shaders/ibm_apply_force.comp.spv");
+    pipeline_ibm_mask_ = CreateSolverPipeline("shaders/ibm_mask.comp.spv");
 }
 
 void FluidSolvers::SolveAdvection(

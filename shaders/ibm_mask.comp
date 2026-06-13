@@ -4,7 +4,13 @@ layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 layout(constant_id = 0) const uint NX = 128u;
 layout(constant_id = 1) const uint NY = 128u;
 
-struct PolyObstacle { uint vert_count; vec2 verts[64]; };
+struct PolyObstacle {
+    uint vert_count;
+    uint _pad;
+    vec2 aabb_min;
+    vec2 aabb_max;
+    vec2 verts[64];
+};
 
 layout(std430, binding = 9) buffer PolySSBO {
     uint obstacle_count;
@@ -38,13 +44,19 @@ float distToSegment(vec2 p, vec2 a, vec2 b) {
 }
 
 // ---------- 到所有障碍边的最小距离 ----------
-float minEdgeDist(vec2 p) {
+float minEdgeDist(vec2 p, float margin) {
     float d = 1.0;
     for (uint oi = 0u; oi < poly.obstacle_count; ++oi) {
+        vec2 amin = poly.obstacles[oi].aabb_min;
+        vec2 amax = poly.obstacles[oi].aabb_max;
+        if (p.x < amin.x - margin || p.x > amax.x + margin ||
+            p.y < amin.y - margin || p.y > amax.y + margin) continue;
+
         uint vc = poly.obstacles[oi].vert_count;
         if (vc < 2) continue;
         for (uint i = 0u; i + 1u < vc; ++i) {
-            d = min(d, distToSegment(p,
+            d = min(d, distToSegment(
+                p,
                 poly.obstacles[oi].verts[i],
                 poly.obstacles[oi].verts[i + 1u]));
         }
@@ -67,13 +79,20 @@ void main() {
 
     float inside = 0.0;
     for (uint oi = 0u; oi < poly.obstacle_count; ++oi) {
+        vec2 amin = poly.obstacles[oi].aabb_min;
+        vec2 amax = poly.obstacles[oi].aabb_max;
+        if (cx < amin.x || cx > amax.x || cy < amin.y || cy > amax.y) continue;
+
         if (pointInPolygon(pos, int(oi))) {
             inside = 1.0;
             break;
         }
     }
 
-    float edge = minEdgeDist(pos);
+    float cell_w = 1.0 / float(NX);
+    float cell_h = 1.0 / float(NY);
+    float margin = 2.0 * max(cell_w, cell_h);
+    float edge = minEdgeDist(pos, margin);
 
     mask.data[gidx * 2u]     = inside;
     mask.data[gidx * 2u + 1u] = edge;

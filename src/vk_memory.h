@@ -10,19 +10,19 @@
 namespace rtfs2d {
 
 uint32_t FindMemoryType(
-        vk::PhysicalDevice physical_device,
-        uint32_t typeFilter,
-        vk::MemoryPropertyFlags properties);
+    vk::PhysicalDevice physical_device,
+    uint32_t typeFilter,
+    vk::MemoryPropertyFlags properties);
 
 using BufferAndMemory =
-        std::pair<std::unique_ptr<vk::raii::Buffer>, std::unique_ptr<vk::raii::DeviceMemory>>;
+    std::pair<std::unique_ptr<vk::raii::Buffer>, std::unique_ptr<vk::raii::DeviceMemory>>;
 
 BufferAndMemory AllocateBuffer(
-        const vk::raii::Device& device,
-        vk::PhysicalDevice physical_device,
-        vk::DeviceSize size,
-        vk::BufferUsageFlags usage,
-        vk::MemoryPropertyFlags memory_flags);
+    const vk::raii::Device& device,
+    vk::PhysicalDevice physical_device,
+    vk::DeviceSize size,
+    vk::BufferUsageFlags usage,
+    vk::MemoryPropertyFlags memory_flags);
 
 template<typename T>
 void UploadBufferData(
@@ -64,6 +64,23 @@ void UploadBufferData(
 
     queue.submit(si);
     queue.waitIdle();
+}
+
+template<typename T>
+void InsertDataToBytesVec(
+        std::vector<uint8_t>& vec,
+        const std::vector<uint8_t>::iterator& pos,
+        const T& data) {
+    auto* bytes = reinterpret_cast<const uint8_t*>(&data);
+    vec.insert(pos, bytes, bytes + sizeof(T));
+}
+
+template<typename T>
+void AppendDataToBytesVec(
+        std::vector<uint8_t>& vec,
+        const T& data) {
+    auto* bytes = reinterpret_cast<const uint8_t*>(&data);
+    vec.insert(vec.end(), bytes, bytes + sizeof(T));
 }
 
 }

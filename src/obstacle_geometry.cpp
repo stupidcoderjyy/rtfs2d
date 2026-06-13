@@ -7,27 +7,54 @@
 #include <algorithm>
 #include <cmath>
 #include <vector>
+#include <spdlog/spdlog.h>
+
+#include "vk_memory.h"
 
 namespace rtfs2d {
 
+void ObstacleGeometry::Obstacle::ComputeAABB() {
+        if (vert_count == 0) return;
+        float min_x = poly_verts[0].x, min_y = poly_verts[0].y;
+        float max_x = min_x, max_y = min_y;
+        for (uint32_t i = 1; i < vert_count; ++i) {
+            float x = poly_verts[i].x, y = poly_verts[i].y;
+            if (x < min_x) min_x = x; if (x > max_x) max_x = x;
+            if (y < min_y) min_y = y; if (y > max_y) max_y = y;
+        }
+        // 在 AABB 边界上略微外扩以避免射线投射精度问题
+        constexpr float kEps = 1e-5f;
+        aabb[0] = min_x - kEps;
+        aabb[1] = min_y - kEps;
+        aabb[2] = max_x + kEps;
+        aabb[3] = max_y + kEps;
+}
+
 void ObstacleGeometry::AddObstacle(const std::vector<std::array<float, 2>>& points) {
     // 检查是否还能添加更多障碍物
-    if (obstacles_.size() >= kMaxObstacles) return;
-    if (points.size() <= 1) return;
-
+    if (polygon_ssbo_.count >= kMaxObstacles) {
+        spdlog::warn("Obstacle ignored: Max obstacles reached({})", kMaxObstacles);
+        return;
+    }
+    if (points.size() <= 1) {
+        spdlog::warn("Obstacle ignored: No polygon points");
+        return;
+    }
     Obstacle obs = {};
-    obs.poly_vert_count = 0;
+    obs.vert_count = 0;
 
     // 复制顶点，最多 kMaxPolyVertexes 个
     auto max_verts = static_cast<uint32_t>(kMaxPolyVerts);
     auto num_points = static_cast<uint32_t>(points.size());
+    if (num_points > max_verts) {
+        spdlog::warn("Max vertices reached({}), {} vertex(es) ignored.", kMaxPolyVerts, num_points - max_verts);
+    }
     uint32_t copy_count = std::min(num_points, max_verts);
-
     for (uint32_t i = 0; i < copy_count; ++i) {
         obs.poly_verts[i].x = points[i][0];
         obs.poly_verts[i].y = points[i][1];
     }
-    obs.poly_vert_count = copy_count;
+    obs.vert_count = copy_count;
 
     // 首尾闭合检测：如果首末点距离大于阈值，则追加首点
     if (copy_count >= 2) {
@@ -37,34 +64,44 @@ void ObstacleGeometry::AddObstacle(const std::vector<std::array<float, 2>>& poin
         float yn = obs.poly_verts[copy_count - 1].y;
         float dx = x0 - xn;
         float dy = y0 - yn;
-        if (float dist = std::sqrt(dx * dx + dy * dy); dist > 1e-6f && copy_count < max_verts) {
-            obs.poly_verts[copy_count].x = x0;
-            obs.poly_verts[copy_count].y = y0;
-            obs.poly_vert_count = copy_count + 1;
+        if (float dist = std::sqrt(dx * dx + dy * dy); dist > 1e-6f) {
+            if (copy_count < max_verts) {
+                obs.poly_verts[copy_count].x = x0;
+                obs.poly_verts[copy_count].y = y0;
+                obs.vert_count = copy_count + 1;
+            } else {
+                obs.poly_verts[max_verts - 1].x = x0;
+                obs.poly_verts[max_verts - 1].y = y0;
+                obs.vert_count = max_verts;
+                spdlog::warn("Replace tail vertex with head vertex");
+            }
         }
     }
-
-    obstacles_.push_back(obs);
+    obs.ComputeAABB();
+    polygon_ssbo_.obstacles[polygon_ssbo_.count++] = std::move(obs);
 }
 
 void ObstacleGeometry::Clear() {
-    obstacles_.clear();
-    ibm_markers_.clear();
+    polygon_ssbo_.count = 0;
+    marker_ssbo_.count = 0;
 }
 
 void ObstacleGeometry::GenerateIBMMarkers(float h) {
-    ibm_markers_.clear();
+    marker_ssbo_.count = 0;
 
     // 半网格间距作为采样步长的上限
     float max_spacing = 0.5f * h;
-    if (max_spacing <= 0.0f) return;
+    if (max_spacing <= 0.0f) {
+        throw std::runtime_error("Negative or zero grid height:" + std::to_string(h));
+    }
 
-    for (const auto&[vtc, vts] : obstacles_) {
-        if (vtc < 2) continue;
+    int marks_capacity = kMaxMarkers;
 
-        // 临时存储当前障碍物的标记点，以便去重
-        std::vector<IBMMarker> temp_markers;
-
+    for (int i = 0; i < polygon_ssbo_.count; ++i) {
+        const auto& [vtc, aabb, vts] = polygon_ssbo_.obstacles[i];
+        if (vtc < 2) {
+            continue;
+        }
         // 遍历每条边
         for (uint32_t k = 0; k + 1 < vtc; ++k) {
             const auto&[x0, y0] = vts[k];
@@ -73,115 +110,48 @@ void ObstacleGeometry::GenerateIBMMarkers(float h) {
             float dx = x1 - x0;
             float dy = y1 - y0;
             float length = std::sqrt(dx * dx + dy * dy);
-            if (length < 1e-6f) continue;
+            if (length < 1e-6f) {
+                spdlog::warn("Ignore coincident points: ({},{}) ({},{})", x0, y0, x1, y1);
+                continue;
+            }
 
             // 采样数量：保证间距 <= max_spacing，至少采样 1 个区间（即两个端点）
             int n_segments = std::max(1, static_cast<int>(length / max_spacing));
+            if (n_segments > marks_capacity) {
+                spdlog::warn("Early termination of sampling on edge {} of obstacle"
+                    " {}: markers reached kMaxIBMMarkers({})", k, i, kMaxMarkers);
+            }
             float step = 1.0f / static_cast<float>(n_segments);
 
             // 对于第一条边，需要显式插入起点；后续边的起点由前一条边的终点自然衔接，为避免重复，
             // 在非首边时跳过起点（s=0）的插入。
             bool is_first_edge = k == 0;
             for (int s = 0; s <= n_segments; ++s) {
-                if (!is_first_edge && s == 0) continue;  // 跳过与非首边的起点重复的点
+                if (!is_first_edge && s == 0) {
+                    continue;  // 跳过与非首边的起点重复的点
+                }
+                if (marks_capacity-- == 0) {
+                    return;  //放弃采样
+                }
                 float t = static_cast<float>(s) * step;
-                float x = x0 + t * dx;
-                float y = y0 + t * dy;
-                temp_markers.push_back({x, y});
-                if (temp_markers.size() >= kMaxIBMMarkers) break;
+                auto& [x, y, d] = marker_ssbo_.markers[marker_ssbo_.count++];
+                x = x0 + t * dx;
+                y = y0 + t * dy;
             }
-            if (temp_markers.size() >= kMaxIBMMarkers) break;
-        }
-
-        // 将生成的临时标记点加入总列表，并限制总数
-        for (const auto& m : temp_markers) {
-            if (ibm_markers_.size() >= kMaxIBMMarkers) {
-                break;
-            }
-            ibm_markers_.push_back(m);
-        }
-        if (ibm_markers_.size() >= kMaxIBMMarkers) {
-            break;
         }
     }
 }
 
 std::vector<uint8_t> ObstacleGeometry::SerializePolygonSSBO() const {
     std::vector<uint8_t> buffer;
-    // 预分配空间，避免反复扩容
-    size_t total_size = PolygonSSBOSize();
-    buffer.reserve(total_size);
-
-    auto write_uint32 = [&buffer](uint32_t value) {
-        auto* bytes = reinterpret_cast<uint8_t*>(&value);
-        buffer.insert(buffer.end(), bytes, bytes + sizeof(value));
-    };
-
-    auto write_float = [&buffer](float value) {
-        auto bytes = reinterpret_cast<uint8_t*>(&value);
-        buffer.insert(buffer.end(), bytes, bytes + sizeof(value));
-    };
-
-    write_uint32(static_cast<uint32_t>(obstacles_.size()));
-    for (const auto&[vtc, vts] : obstacles_) {
-        write_uint32(vtc);
-        for (uint32_t i = 0; i < vtc; ++i) {
-            write_float(vts[i].x);
-            write_float(vts[i].y);
-        }
-    }
+    AppendDataToBytesVec(buffer, polygon_ssbo_);
     return buffer;
 }
 
 std::vector<uint8_t> ObstacleGeometry::SerializeMarkerSSBO() const {
     std::vector<uint8_t> buffer;
-    size_t total_size = MarkerSSBOSize();
-    buffer.reserve(total_size);
-
-    auto write_uint32 = [&buffer](uint32_t value) {
-        auto* bytes = reinterpret_cast<uint8_t*>(&value);
-        buffer.insert(buffer.end(), bytes, bytes + sizeof(value));
-    };
-
-    auto write_float = [&buffer](float value) {
-        auto* bytes = reinterpret_cast<uint8_t*>(&value);
-        buffer.insert(buffer.end(), bytes, bytes + sizeof(value));
-    };
-
-    write_uint32(static_cast<uint32_t>(ibm_markers_.size()));
-    for (const auto&[x, y] : ibm_markers_) {
-        write_float(x);
-        write_float(y);
-    }
+    AppendDataToBytesVec(buffer, marker_ssbo_);
     return buffer;
-}
-
-uint32_t ObstacleGeometry::PolygonSSBOSize() const {
-    uint32_t size = 4;  // 障碍物数量
-    for (const auto& obs : obstacles_) {
-        size += 4;                     // vertex_count
-        size += obs.poly_vert_count * 8; // 每个顶点两个 float
-    }
-    return size;
-}
-
-uint32_t ObstacleGeometry::MarkerSSBOSize() const {
-    return 4 + static_cast<uint32_t>(ibm_markers_.size()) * 8;
-}
-
-float ObstacleGeometry::DeltaKernel1D(float r) {
-    float a = std::fabs(r);
-    if (a <= 1.0f) {
-        float sqrt_arg = 1.0f + 4.0f * a - 4.0f * a * a;
-        float sqrt_val = std::sqrt(std::max(0.0f, sqrt_arg));
-        return (3.0f - 2.0f * a + sqrt_val) / 8.0f;
-    }
-    if (a <= 2.0f) {
-        float sqrt_arg = -7.0f + 12.0f * a - 4.0f * a * a;
-        float sqrt_val = std::sqrt(std::max(0.0f, sqrt_arg));
-        return (5.0f - 2.0f * a - sqrt_val) / 8.0f;
-    }
-    return 0.0f;
 }
 
 }
