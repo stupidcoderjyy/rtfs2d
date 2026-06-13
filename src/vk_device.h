@@ -7,7 +7,6 @@
 
 #include <vulkan/vulkan_raii.hpp>
 #include <GLFW/glfw3.h>
-
 #include "vk_memory.h"
 
 namespace rtfs2d {
@@ -36,6 +35,28 @@ public:
         UploadBufferData(*device_, physical_device_, *command_pool_, *graphics_queue_, data, dst_buffer);
     }
 
+    void CreateBuffer(
+        int idx,
+        vk::DeviceSize size,
+        vk::BufferUsageFlags usage,
+        vk::MemoryPropertyFlags memory_flags);
+
+    template<typename T>
+    void InitBuffer(int idx, const std::vector<T> &data) {
+        UploadDeviceBufferData(data, BufferAt(idx));
+    }
+
+    template<typename T>
+    void InitBuffer(int idx, const T& val) {
+        UploadDeviceBufferData(std::vector<T>(BufferSize(idx), val), BufferAt(idx));
+    }
+
+    const vk::raii::Buffer& BufferAt(int idx) const {
+        return *buffers_[idx];
+    }
+    vk::DeviceSize BufferSize(int idx) const {
+        return buffer_infos_[idx].size;
+    }
     vk::raii::SurfaceKHR& surface() const { return *surface_; }
     vk::raii::PhysicalDevice& physical_device() { return physical_device_; }
     const vk::raii::Device& device() const { return *device_; }
@@ -58,6 +79,12 @@ private:
     std::unique_ptr<vk::raii::Queue> present_queue_;
     std::unique_ptr<vk::raii::CommandPool> command_pool_;
     std::unique_ptr<vk::raii::CommandPool> compute_command_pool_;
+    struct BufferInfo {
+        vk::DeviceSize size;
+    };
+    std::vector<std::unique_ptr<vk::raii::Buffer>> buffers_;
+    std::vector<std::unique_ptr<vk::raii::DeviceMemory>> memories_;
+    std::vector<BufferInfo> buffer_infos_;
 
     void CreateVkInstance();
     std::vector<const char*> GetEnabledExtensions();

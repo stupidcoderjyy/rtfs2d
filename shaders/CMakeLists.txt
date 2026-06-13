@@ -2,13 +2,16 @@ set(TARGET rtfs2d_shaders)
 
 set(SHADER_SOURCES
         advection.comp
-        diverge.comp
-        fullscreen.frag
-        fullscreen.vert
         diffusion.comp
         poisson.comp
+        fullscreen.frag
+        diverge.comp
         project.comp
+        fullscreen.vert
         vorticity.comp
+        ibm_interpolate.comp
+        ibm_spread_markers.comp
+        ibm_apply_force.comp
 )
 
 find_program(GLSLC glslc HINTS "${LIB_PREFIX_PATH}/bin")

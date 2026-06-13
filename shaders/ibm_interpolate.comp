@@ -1,0 +1,72 @@
+#version 450
+
+layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+layout(constant_id = 0) const uint NX = 128u;
+layout(constant_id = 1) const uint NY = 128u;
+
+const float DT = 0.016f;
+
+layout(std430, binding = 0) buffer UField { float data[]; } u;
+layout(std430, binding = 1) buffer VField { float data[]; } v;
+layout(std430, binding = 10) buffer MarkerField { uint marker_count; float data[]; } markers;
+
+// ---------- 4 点正则化 Dirac delta 核 ----------
+float delta1D(float r) {
+    float a = abs(r);
+    if (a <= 1.0) {
+        float arg = 1.0 + 4.0 * a - 4.0 * a * a;
+        return (3.0 - 2.0 * a + sqrt(max(0.0, arg))) / 8.0;
+    }
+    if (a <= 2.0) {
+        float arg = -7.0 + 12.0 * a - 4.0 * a * a;
+        return (5.0 - 2.0 * a - sqrt(max(0.0, arg))) / 8.0;
+    }
+    return 0.0;
+}
+
+// ---------- 安全读取网格速度 ----------
+float gridVelocity(int ci, int cj, bool is_u) {
+    ci = clamp(ci, 0, int(NX) - 1);
+    cj = clamp(cj, 0, int(NY) - 1);
+    uint gidx = uint(ci) + uint(cj) * NX;
+    return is_u ? u.data[gidx] : v.data[gidx];
+}
+
+// ---------- 将网格速度插值到标记位置 ----------
+float interpVelocity(vec2 mp, bool is_u) {
+    float gx = mp.x * float(NX);
+    float gy = mp.y * float(NY);
+    int i0 = int(floor(gx)) - 1;
+    int j0 = int(floor(gy)) - 1;
+    float sum = 0.0;
+    for (int dj = 0; dj < 4; ++dj) {
+        for (int di = 0; di < 4; ++di) {
+            float wx = delta1D(gx - float(i0 + di));
+            float wy = delta1D(gy - float(j0 + dj));
+            sum += wx * wy * gridVelocity(i0 + di, j0 + dj, is_u);
+        }
+    }
+    return sum;
+}
+
+// ---------- 主函数：对每个标记执行速度插值与力计算 ----------
+void main() {
+    uint midx = gl_GlobalInvocationID.x;
+    if (midx >= markers.marker_count) return;
+
+    uint off = midx * 6u;
+    float mx = markers.data[off];
+    float my = markers.data[off + 1u];
+
+    float vx = interpVelocity(vec2(mx, my), true);
+    float vy = interpVelocity(vec2(mx, my), false);
+
+    // 直接力公式：F = (0 - v_interp) / dt
+    float fx = -vx / DT;
+    float fy = -vy / DT;
+
+    markers.data[off + 2u] = fx;
+    markers.data[off + 3u] = fy;
+    markers.data[off + 4u] = vx;
+    markers.data[off + 5u] = vy;
+}

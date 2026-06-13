@@ -1,0 +1,68 @@
+#version 450
+
+layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+layout(constant_id = 0) const uint NX = 128u;
+layout(constant_id = 1) const uint NY = 128u;
+
+const float DT = 0.016f;
+
+layout(std430, binding = 10) buffer MarkerField { uint marker_count; float data[]; } markers;
+layout(std430, binding = 11) buffer ForceField { uint data[]; } force;
+
+// ---------- 4 点正则化 Dirac delta 核 ----------
+float delta1D(float r) {
+    float a = abs(r);
+    if (a <= 1.0) {
+        float arg = 1.0 + 4.0 * a - 4.0 * a * a;
+        return (3.0 - 2.0 * a + sqrt(max(0.0, arg))) / 8.0;
+    }
+    if (a <= 2.0) {
+        float arg = -7.0 + 12.0 * a - 4.0 * a * a;
+        return (5.0 - 2.0 * a - sqrt(max(0.0, arg))) / 8.0;
+    }
+    return 0.0;
+}
+
+// ---------- CAS 浮点原子加（直接操作 SSBO，不通过 inout 参数）----------
+uint atomicAddFloat(uint idx, float val) {
+    uint expected = force.data[idx];
+    while (true) {
+        float sum = uintBitsToFloat(expected) + val;
+        uint desired = floatBitsToUint(sum);
+        uint old = atomicCompSwap(force.data[idx], expected, desired);
+        if (old == expected) return desired;
+        expected = old;
+    }
+}
+
+// ---------- 主函数：每标记向 4x4 支撑域散布力 ----------
+void main() {
+    uint midx = gl_GlobalInvocationID.x;
+    if (midx >= markers.marker_count) return;
+
+    uint off = midx * 6u;
+    float mx = markers.data[off];
+    float my = markers.data[off + 1u];
+    float fx = markers.data[off + 2u];
+    float fy = markers.data[off + 3u];
+
+    float gx = mx * float(NX);
+    float gy = my * float(NY);
+    int i0 = int(floor(gx)) - 1;
+    int j0 = int(floor(gy)) - 1;
+
+    for (int dj = 0; dj < 4; ++dj) {
+        for (int di = 0; di < 4; ++di) {
+            int ci = i0 + di;
+            int cj = j0 + dj;
+            if (ci < 0 || ci >= int(NX)) continue;
+            if (cj < 0 || cj >= int(NY)) continue;
+
+            float w = delta1D(gx - float(ci)) * delta1D(gy - float(cj));
+            uint gidx = uint(ci) + uint(cj) * NX;
+
+            atomicAddFloat(gidx * 2u,      w * fx * DT);
+            atomicAddFloat(gidx * 2u + 1u,  w * fy * DT);
+        }
+    }
+}

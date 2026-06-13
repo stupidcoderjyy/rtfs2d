@@ -59,16 +59,16 @@ void ObstacleGeometry::GenerateIBMMarkers(float h) {
     float max_spacing = 0.5f * h;
     if (max_spacing <= 0.0f) return;
 
-    for (const auto& obs : obstacles_) {
-        if (obs.poly_vert_count < 2) continue;
+    for (const auto&[vtc, vts] : obstacles_) {
+        if (vtc < 2) continue;
 
         // 临时存储当前障碍物的标记点，以便去重
         std::vector<IBMMarker> temp_markers;
 
         // 遍历每条边
-        for (uint32_t k = 0; k + 1 < obs.poly_vert_count; ++k) {
-            const auto&[x0, y0] = obs.poly_verts[k];
-            const auto&[x1, y1] = obs.poly_verts[k + 1];
+        for (uint32_t k = 0; k + 1 < vtc; ++k) {
+            const auto&[x0, y0] = vts[k];
+            const auto&[x1, y1] = vts[k + 1];
 
             float dx = x1 - x0;
             float dy = y1 - y0;
@@ -123,11 +123,11 @@ std::vector<uint8_t> ObstacleGeometry::SerializePolygonSSBO() const {
     };
 
     write_uint32(static_cast<uint32_t>(obstacles_.size()));
-    for (const auto& obs : obstacles_) {
-        write_uint32(obs.poly_vert_count);
-        for (uint32_t i = 0; i < obs.poly_vert_count; ++i) {
-            write_float(obs.poly_verts[i].x);
-            write_float(obs.poly_verts[i].y);
+    for (const auto&[vtc, vts] : obstacles_) {
+        write_uint32(vtc);
+        for (uint32_t i = 0; i < vtc; ++i) {
+            write_float(vts[i].x);
+            write_float(vts[i].y);
         }
     }
     return buffer;

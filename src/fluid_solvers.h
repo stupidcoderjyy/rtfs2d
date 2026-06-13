@@ -26,6 +26,9 @@ public:
     void SolveProjection(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
     void SolveVorticity(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds,
         float epsilon) const;
+    void SolveIBMInterpolate(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
+    void SolveIBMSpread(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
+    void SolveIBMApplyForce(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
 private:
     static constexpr int kWorkGroupSize = 128;
     DeviceManager* dm_;
@@ -39,6 +42,9 @@ private:
     std::unique_ptr<vk::raii::Pipeline> pipeline_projection_;
     std::unique_ptr<vk::raii::PipelineLayout> pipeline_layout_vorticity_;
     std::unique_ptr<vk::raii::Pipeline> pipeline_vorticity_;
+    std::unique_ptr<vk::raii::Pipeline> pipeline_ibm_interpolate_;
+    std::unique_ptr<vk::raii::Pipeline> pipeline_ibm_spread_;
+    std::unique_ptr<vk::raii::Pipeline> pipeline_ibm_apply_force_;
 
     std::unique_ptr<vk::raii::Pipeline> CreateSolverPipeline(const std::string& shader) const;
     void CreateJacobiPipelines();

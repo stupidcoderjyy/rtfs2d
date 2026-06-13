@@ -71,6 +71,26 @@ std::unique_ptr<vk::raii::Pipeline> DeviceManager::CreateComputePipelineFromFile
         device_->createComputePipeline(nullptr, cp_ci));
 }
 
+void DeviceManager::CreateBuffer(
+        int idx,
+        vk::DeviceSize size,
+        vk::BufferUsageFlags usage,
+        vk::MemoryPropertyFlags memory_flags) {
+    auto pos = static_cast<size_t>(idx);
+    if (pos < buffers_.size() && buffers_[pos].get()) {
+        throw std::runtime_error("buffer[" + std::to_string(pos) + "] has been created");
+    }
+    if (pos >= buffers_.size()) {
+        buffers_.resize(pos + 1);
+        buffer_infos_.resize(pos + 1);
+        memories_.resize(pos + 1);
+    }
+    auto [buf, mem] = AllocateDeviceBuffer(size, usage, memory_flags);
+    buffers_[pos] = std::move(buf);
+    memories_[pos] = std::move(mem);
+    buffer_infos_[pos].size = size;
+}
+
 void DeviceManager::CreateVkInstance() {
     auto enabled_extensions = GetEnabledExtensions();
     auto enabled_layers = GetEnabledValidationLayers();

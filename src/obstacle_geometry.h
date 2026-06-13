@@ -16,6 +16,14 @@ public:
     static constexpr uint32_t kMaxPolyVerts = 64;
     static constexpr uint32_t kMaxIBMMarkers = 256;
 
+    // | 障碍个数(32) | 顶点个数(32) x1 y1 ... x64 y64 |
+    static constexpr uint32_t kPolygonBufferSize =
+        sizeof(uint32_t) + kMaxObstacles * (sizeof(uint32_t) + kMaxPolyVerts * sizeof(float) * 2);
+
+    // 标记个数 | x y fx fy vx vy | ...
+    static constexpr uint32_t kMarkerBufferSize =
+        sizeof(uint32_t) + kMaxIBMMarkers * sizeof(float) * 6;
+
     struct PolyVert {
         float x, y;
     };
@@ -40,10 +48,8 @@ public:
     uint32_t MarkerSSBOSize() const;
     static float DeltaKernel1D(float r);
 
-    uint32_t ObstacleCount() const { return obstacles_.size(); }
-    const Obstacle& GetObstacle(uint32_t idx) const { return obstacles_[idx]; }
-    uint32_t IBMMarkerCount() const { return ibm_markers_.size(); }
-    const IBMMarker* IBMMarkerData() const { return ibm_markers_.data(); }
+    const std::vector<Obstacle>& obstacles() const { return obstacles_; }
+    const std::vector<IBMMarker>& ibm_markers() const { return ibm_markers_; }
 private:
     std::vector<Obstacle> obstacles_;
     std::vector<IBMMarker> ibm_markers_;

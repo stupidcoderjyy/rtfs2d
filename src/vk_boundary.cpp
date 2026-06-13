@@ -17,17 +17,14 @@ BoundaryContext::BoundaryContext(DeviceManager& dm, const GridParams& gp) :
     v_cell_count_ = grid_params_.ny - 2;
     h_buf_size_ = h_cell_count_ * kBufferUnitSize;
     v_buf_size_ = v_cell_count_ * kBufferUnitSize;
-    for (int i = 0; i < 4; ++i) {
-        auto buf_size = i <= 1 ? v_buf_size_ : h_buf_size_;
-        auto [type_buf, type_mem] = dm_->AllocateDeviceBuffer(
-            buf_size,
-            vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
-            vk::MemoryPropertyFlagBits::eDeviceLocal);
+    auto usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
+    auto prop = vk::MemoryPropertyFlagBits::eDeviceLocal;
+    for (int i = buffers::kBufBc0; i <= buffers::kBufBc3; ++i) {
+        auto buf_size = i <= buffers::kBufBc2 ? v_buf_size_ : h_buf_size_;
+        dm_->CreateBuffer(i, buf_size, usage, prop);
         //默认边界条件：无滑移墙壁
         std::vector<uint8_t> initial(buf_size, 0); // kNoSlipWall + 0.0f + 0.0f
-        dm_->UploadDeviceBufferData(initial, *type_buf);
-        buffer_bc_info_[i] = std::move(type_buf);
-        memory_bc_info_[i] = std::move(type_mem);
+        dm_->InitBuffer(i, initial);
     }
 }
 
@@ -43,11 +40,10 @@ void BoundaryContext::BeginSetBoundary() {
     }
 }
 
-void BoundaryContext::EndSetBoundary() {
+void BoundaryContext::EndSetBoundary() const {
     for (int d = 0; d < 4; ++d) {
         uint32_t cell_count = d <= 1 ? v_cell_count_ : h_cell_count_;
         uint32_t buf_size = d <= 1 ? v_buf_size_ : h_buf_size_;
-        buffer_size_[d] = buf_size;
         //默认边界条件：无滑移墙壁
         std::vector<uint8_t> bytes(buf_size, 0);
         //覆盖自定义边界条件
@@ -64,7 +60,7 @@ void BoundaryContext::EndSetBoundary() {
                 off += kBufferUnitSize;
             }
         }
-        dm_->UploadDeviceBufferData(bytes, *buffer_bc_info_[d]);
+        dm_->InitBuffer(buffers::kBufBc0 + d, bytes);
     }
 }
 
