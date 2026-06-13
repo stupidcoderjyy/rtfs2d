@@ -39,9 +39,6 @@ public:
 
     void AddBufferMemoryWriteReadBarrier(const vk::raii::CommandBuffer& cb, int buf) const;
 
-    // 浸入边界法相关接口
-    void UploadObstacles(const ObstacleGeometry& geom);
-
     // getter
     const vk::raii::DescriptorSet& DescriptorSetAt(DescriptorSetIndex idx) const {
         return *descriptor_sets_[idx];
@@ -73,6 +70,7 @@ private:
     void CreatePipelineLayout();
     void RecordFluidStepCommands(const vk::raii::Queue& queue, const vk::raii::CommandBuffer& cb) const;
     void InitializeVortexField() const; // 初始化流场为涡旋场
+    void UploadObstacles(const ObstacleGeometry& geom);
 
     void DebugReadBackBuffer(const vk::raii::Buffer& buf, uint32_t size,
         const std::function<void(void* buf, uint32_t len)>& handler) const;
@@ -81,6 +79,7 @@ private:
     void DebugReadBackVelocityBufferPoints(const vk::raii::Queue& queue, const vk::raii::CommandBuffer& cb,
         int buffer, const std::string& log_prefix, const std::vector<int>& indexes) const;
     void DebugReadBackBoundaryBuffer(int buffer) const;
+    void AddDebugGeometry();
 };
 
 }  // namespace rtfs2d
