@@ -71,7 +71,7 @@ private:
     void CreatePipelineLayout();
     void RecordFluidStepCommands(const vk::raii::Queue& queue, const vk::raii::CommandBuffer& cb) const;
     void InitializeVortexField() const; // 初始化流场为涡旋场
-    void UploadObstacles(const ObstacleGeometry& geom) const;
+    void UploadObstacles(const ObstacleGeometry& geom);
 
     void DebugReadBackBuffer(const vk::raii::Buffer& buf, uint32_t size,
         const std::function<void(void* buf, uint32_t len)>& handler) const;

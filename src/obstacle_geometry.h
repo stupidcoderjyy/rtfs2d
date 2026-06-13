@@ -14,7 +14,7 @@ class ObstacleGeometry {
 public:
     static constexpr uint32_t kMaxObstacles = 16;
     static constexpr uint32_t kMaxPolyVerts = 64;
-    static constexpr uint32_t kMaxMarkers = 256;
+    static constexpr uint32_t kMaxMarkers = 2560;
 
     struct PolyVert {
         float x, y;
@@ -52,6 +52,9 @@ public:
     void Clear();
     std::vector<uint8_t> SerializePolygonSSBO() const;
     std::vector<uint8_t> SerializeMarkerSSBO() const;
+    uint32_t MarksCount() const {
+        return marker_ssbo_.count;
+    }
 private:
     PolygonSSBO polygon_ssbo_{};
     MarkerSSBO marker_ssbo_{};

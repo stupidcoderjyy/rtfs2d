@@ -20,7 +20,7 @@ BoundaryContext::BoundaryContext(DeviceManager& dm, const GridParams& gp) :
     auto usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
     auto prop = vk::MemoryPropertyFlagBits::eDeviceLocal;
     for (int i = buffers::kBufBc0; i <= buffers::kBufBc3; ++i) {
-        auto buf_size = i <= buffers::kBufBc2 ? v_buf_size_ : h_buf_size_;
+        auto buf_size = i < buffers::kBufBc2 ? v_buf_size_ : h_buf_size_;
         dm_->CreateBuffer(i, buf_size, usage, prop);
         //默认边界条件：无滑移墙壁
         std::vector<uint8_t> initial(buf_size, 0); // kNoSlipWall + 0.0f + 0.0f

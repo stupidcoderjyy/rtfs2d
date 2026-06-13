@@ -20,5 +20,23 @@ void main() {
     float inside = mask.data[midx * 2u];
     float edge  = mask.data[midx * 2u + 1u];
 
-    outColor = vec4(inside, edge * 50.0, 0.0, 1.0);
+    if (inside > 0.5) {
+        outColor = vec4(0.05, 0.05, 0.08, 1.0);
+        return;
+    }
+
+    if (edge < 0.003) {
+        outColor = vec4(0.3, 0.6, 1.0, 1.0);
+        return;
+    }
+
+    uint i = mi;
+    uint j = mj;
+    uint idx = i + j * NX;
+
+    float u = vel_u[idx];
+    float v = vel_v[idx];
+    float mag = length(vec2(u, v));
+    float intensity = clamp(mag, 0.0, 1.0);
+    outColor = vec4(intensity, intensity, intensity, 1.0);
 }

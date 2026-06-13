@@ -28,7 +28,7 @@ void Window::Show() {
         window_ = glfwCreateWindow(width_, height_, title_.c_str(), nullptr, nullptr);
         device_manager_ = std::make_unique<DeviceManager>(window_, debug_enabled_);
         swapchain_ctx_ = std::make_unique<SwapchainContext>(*device_manager_, width_, height_);
-        GridParams params{128, 128};
+        GridParams params{512, 512};
         compute_ctx_ = std::make_unique<ComputeContext>(*device_manager_, params);
         graphics_ctx_ = std::make_unique<GraphicsContext>(*device_manager_, *swapchain_ctx_, *compute_ctx_);
 

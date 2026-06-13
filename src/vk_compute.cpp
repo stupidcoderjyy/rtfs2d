@@ -25,9 +25,9 @@ ComputeContext::ComputeContext(DeviceManager& dm, const GridParams& params):
     fluid_solvers_ = std::make_unique<FluidSolvers>(dm, *this);
     boundary_ctx_->BeginSetBoundary();
     boundary_ctx_->SetBoundary(BoundaryDirection::kLeft, BoundaryType::kVelocity,
-        0.495, 0.505, 5.0f);
-    boundary_ctx_->SetBoundary(BoundaryDirection::kTop, BoundaryType::kPressure,
-        0.4,0.6);
+        0, 1, 0.6f);
+    boundary_ctx_->SetBoundary(BoundaryDirection::kRight, BoundaryType::kPressure,
+        0,1);
     boundary_ctx_->EndSetBoundary();
     AddDebugGeometry();
 }
@@ -56,7 +56,7 @@ void ComputeContext::AddBufferMemoryWriteReadBarrier(
     barrier.setSrcAccessMask(vk::AccessFlagBits::eShaderWrite)
         .setDstAccessMask(vk::AccessFlagBits::eShaderRead)
         .setBuffer(*dm_->BufferAt(buf))
-        .setSize(compute_buf_size_)
+        .setSize(dm_->BufferSize(buf))
         .setOffset(0)
         .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
         .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
@@ -230,20 +230,32 @@ void ComputeContext::CreatePipelineLayout() {
 void ComputeContext::RecordFluidStepCommands(const vk::raii::Queue& queue, const vk::raii::CommandBuffer& cb) const {
     cb.begin({vk::CommandBufferUsageFlagBits::eSimultaneousUse});
 
+    // u, v, markers → markers
+    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV0);
+    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV1);
+    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufIbmMarker);
+    fluid_solvers_->SolveIBMInterpolate(cb, DescriptorSetAt(kSetIbmInterpolate));
+    // markers → force
+    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufIbmMarker);
+    fluid_solvers_->SolveIBMSpread(cb, DescriptorSetAt(kSetIbmSpreadMarkers));
+    // force → u, v
+    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufIbmForce);
+    fluid_solvers_->SolveIBMApplyForce(cb, DescriptorSetAt(kSetIbmApplyForce));
+
     // 平流
     // [0(u), 1(v), 2, 3, 4]
-    AddBufferMemoryWriteReadBarrier(cb, 0);
-    AddBufferMemoryWriteReadBarrier(cb, 1);
+    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV0);
+    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV1);
     fluid_solvers_->SolveAdvection(cb, DescriptorSetAt(kSetAdvection));
 
     // 涡量约束
     // [0(u), 1(v), 2, 3, 4]
-    AddBufferMemoryWriteReadBarrier(cb, 0);
-    AddBufferMemoryWriteReadBarrier(cb, 1);
-    fluid_solvers_->SolveVorticity(cb, DescriptorSetAt(kSetVorticity), 0.5f);
+    // AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV0);
+    // AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV1);
+    // fluid_solvers_->SolveVorticity(cb, DescriptorSetAt(kSetVorticity), 0.5f);
 
     // 扩散迭代（u 和 v 各做一次雅可比迭代）
-    float viscosity = 0.0f;
+    float viscosity = 0.2f;
     float dx = grid_params_.dx;
     float alpha = viscosity * 0.016f / (dx * dx);
     float beta = 4.0f + alpha;
@@ -251,14 +263,14 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::Queue& queue, const
     for (int iter = 0; iter < 21; ++iter) {
         if (iter & 1) {
             // [0(u), 1(v), 2, 3, 4]
-            AddBufferMemoryWriteReadBarrier(cb, 0);
-            AddBufferMemoryWriteReadBarrier(cb, 1);
+            AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV0);
+            AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV1);
             fluid_solvers_->SolveDiffusion(cb, DescriptorSetAt(kSetDiffusionOdd), alpha, beta);
             // [0, 1, 2(u), 3(v), 4]
         } else {
             // [0, 1, 2(u), 3(v), 4]
-            AddBufferMemoryWriteReadBarrier(cb, 2);
-            AddBufferMemoryWriteReadBarrier(cb, 3);
+            AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV2);
+            AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV3);
             fluid_solvers_->SolveDiffusion(cb, DescriptorSetAt(kSetDiffusionEven), alpha, beta);
             // [0(u), 1(v), 2, 3, 4] -> 退出循环 | 进入另一个分支
         }
@@ -266,8 +278,8 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::Queue& queue, const
 
     // 散度计算
     // [0(u), 1(v), 2(div), 3, 4]
-    AddBufferMemoryWriteReadBarrier(cb, 0);
-    AddBufferMemoryWriteReadBarrier(cb, 1);
+    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV0);
+    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV1);
     fluid_solvers_->SolveDivergence(cb, DescriptorSetAt(kSetDivergence));
 
     // 压力求解迭代（雅可比迭代解泊松方程）
@@ -276,12 +288,12 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::Queue& queue, const
         float beta_p = 4.0f;
         if (iter & 1) {
             //[0(u), 1(v), 2(div), 3(pi), 4(po)]
-            AddBufferMemoryWriteReadBarrier(cb, 3);
+            AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV3);
             fluid_solvers_->SolvePoisson(cb, DescriptorSetAt(kSetPressureOdd), alpha_p, beta_p);
             //[0(u), 1(v), 2(div), 3, 4(pi)] -> 退出循环
         } else {
             //[0(u), 1(v), 2(div), 3(po), 4(pi)]
-            AddBufferMemoryWriteReadBarrier(cb, 4);
+            AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV4);
             fluid_solvers_->SolvePoisson(cb, DescriptorSetAt(kSetPressureEven), alpha_p, beta_p);
             //[0(u), 1(v), 2(div), 3(pi), 4]
         }
@@ -289,10 +301,9 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::Queue& queue, const
 
     // 压力投影
     // [0(u), 1(v), 2(div), 3, 4(p)]
-    AddBufferMemoryWriteReadBarrier(cb, 4);
+    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV4);
     fluid_solvers_->SolveProjection(cb, DescriptorSetAt(kSetProjection));
     // [0(u), 1(v), 2(div), 3, 4(p)]
-
     cb.end();
 }
 
@@ -340,9 +351,10 @@ void ComputeContext::InitializeVortexField() const {
     dm_->UploadDeviceBufferData(v_data, dm_->BufferAt(buffers::kBufV1));
 }
 
-void ComputeContext::UploadObstacles(const ObstacleGeometry &geom) const {
+void ComputeContext::UploadObstacles(const ObstacleGeometry &geom) {
     dm_->InitBuffer(buffers::kBufIbmPolygon, geom.SerializePolygonSSBO());
     dm_->InitBuffer(buffers::kBufIbmMarker, geom.SerializeMarkerSSBO());
+    ibm_marker_count_ = geom.MarksCount();
 
     // 预计算障碍掩码
     vk::CommandBufferAllocateInfo ai{};
@@ -483,14 +495,20 @@ void ComputeContext::AddDebugGeometry() {
     ObstacleGeometry geom;
     std::vector<std::array<float,2>> points;
     for (float rad = 0; rad < 2 * M_PI; rad += M_PI / 16.0f) {
-        float r =  0.12f;
-        float y0 = 0.5f;
-        float x0 = 0.5f;
+        float r =  0.05f;
+        float y0 = 0.2f;
+        float x0 = 0.1f;
         points.push_back({
             x0 + r * std::cos(rad),
             y0 + r * std::sin(rad)
         });
     }
+    geom.AddObstacle(points);
+    points.clear();
+    points.push_back({0.5f, 0.3f});
+    points.push_back({0.7f, 0.3f});
+    points.push_back({0.7f, 0.7f});
+    points.push_back({0.5f, 0.7f});
     geom.AddObstacle(points);
     geom.GenerateIBMMarkers(grid_params_.dx);
     UploadObstacles(geom);
