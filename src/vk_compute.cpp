@@ -25,7 +25,7 @@ ComputeContext::ComputeContext(DeviceManager& dm, const GridParams& params):
     fluid_solvers_ = std::make_unique<FluidSolvers>(dm, *this);
     boundary_ctx_->BeginSetBoundary();
     boundary_ctx_->SetBoundary(BoundaryDirection::kLeft, BoundaryType::kVelocity,
-        0, 1, 0.6f);
+        0, 1, 0.7f);
     boundary_ctx_->SetBoundary(BoundaryDirection::kRight, BoundaryType::kPressure,
         0,1);
     boundary_ctx_->EndSetBoundary();
@@ -186,6 +186,7 @@ void ComputeContext::CreateDescriptorSets() {
             0, buffers::kBufV0 /* u_src */,
             1, buffers::kBufV1 /* v_src */,
             11, buffers::kBufIbmForce,
+            12, buffers::kBufIbmMask,
         }, {kSetIbmInterpolate,
             0, buffers::kBufV0 /* u_src */,
             1, buffers::kBufV1 /* v_src */,
@@ -250,12 +251,12 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::Queue& queue, const
 
     // 涡量约束
     // [0(u), 1(v), 2, 3, 4]
-    // AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV0);
-    // AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV1);
-    // fluid_solvers_->SolveVorticity(cb, DescriptorSetAt(kSetVorticity), 0.5f);
+    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV0);
+    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV1);
+    fluid_solvers_->SolveVorticity(cb, DescriptorSetAt(kSetVorticity), 0.5f);
 
     // 扩散迭代（u 和 v 各做一次雅可比迭代）
-    float viscosity = 0.2f;
+    float viscosity = 0.8f;
     float dx = grid_params_.dx;
     float alpha = viscosity * 0.016f / (dx * dx);
     float beta = 4.0f + alpha;
@@ -310,43 +311,6 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::Queue& queue, const
 void ComputeContext::InitializeVortexField() const {
     std::vector u_data(compute_cell_count_, 0.0f);
     std::vector v_data(compute_cell_count_, 0.0f);
-    /*
-    const uint32_t nx = grid_params_.nx;
-    const uint32_t ny = grid_params_.ny;
-
-    // 2. 遍历每个网格单元
-    for (uint32_t j = 0; j < ny; ++j)
-    {
-        for (uint32_t i = 0; i < nx; ++i)
-        {
-            uint32_t k = i + j * nx;   // 一维索引
-
-            // 网格单元中心的归一化坐标
-            float x = static_cast<float>(i) / static_cast<float>(nx);
-            float y = static_cast<float>(j) / static_cast<float>(ny);
-
-            // 涡旋中心 1：全局中心 (0.5, 0.5)
-            float cx1 = 0.5f, cy1 = 0.5f;
-            float dx1 = x - cx1;
-            float dy1 = y - cy1;
-            float r2_1 = dx1 * dx1 + dy1 * dy1;
-            float w1 = std::exp(-r2_1 * 50.0f);   // 高斯衰减
-
-            // 旋转速度方向：(-dy, dx) 逆时针
-            u_data[k] += w1 * (-dy1);
-            v_data[k] += w1 *  dx1;
-
-            // 涡旋中心 2：左下方 (0.25, 0.25)
-            float cx2 = 0.25f, cy2 = 0.25f;
-            float dx2 = x - cx2;
-            float dy2 = y - cy2;
-            float r2_2 = dx2 * dx2 + dy2 * dy2;
-            float w2 = std::exp(-r2_2 * 50.0f);
-
-            u_data[k] += w2 * (-dy2);
-            v_data[k] += w2 *  dx2;
-        }
-    }*/
     dm_->UploadDeviceBufferData(u_data, dm_->BufferAt(buffers::kBufV0));
     dm_->UploadDeviceBufferData(v_data, dm_->BufferAt(buffers::kBufV1));
 }
@@ -496,19 +460,13 @@ void ComputeContext::AddDebugGeometry() {
     std::vector<std::array<float,2>> points;
     for (float rad = 0; rad < 2 * M_PI; rad += M_PI / 16.0f) {
         float r =  0.05f;
-        float y0 = 0.2f;
+        float y0 = 0.5f;
         float x0 = 0.1f;
         points.push_back({
             x0 + r * std::cos(rad),
             y0 + r * std::sin(rad)
         });
     }
-    geom.AddObstacle(points);
-    points.clear();
-    points.push_back({0.5f, 0.3f});
-    points.push_back({0.7f, 0.3f});
-    points.push_back({0.7f, 0.7f});
-    points.push_back({0.5f, 0.7f});
     geom.AddObstacle(points);
     geom.GenerateIBMMarkers(grid_params_.dx);
     UploadObstacles(geom);

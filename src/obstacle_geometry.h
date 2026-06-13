@@ -14,7 +14,7 @@ class ObstacleGeometry {
 public:
     static constexpr uint32_t kMaxObstacles = 16;
     static constexpr uint32_t kMaxPolyVerts = 64;
-    static constexpr uint32_t kMaxMarkers = 2560;
+    static constexpr uint32_t kMaxMarkers = 2048;
 
     struct PolyVert {
         float x, y;

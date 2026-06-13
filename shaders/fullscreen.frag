@@ -21,11 +21,11 @@ void main() {
     float edge  = mask.data[midx * 2u + 1u];
 
     if (inside > 0.5) {
-        outColor = vec4(0.05, 0.05, 0.08, 1.0);
+        outColor = vec4(0, 0, 0, 1.0);
         return;
     }
 
-    if (edge < 0.003) {
+    if (edge < 0.002) {
         outColor = vec4(0.3, 0.6, 1.0, 1.0);
         return;
     }

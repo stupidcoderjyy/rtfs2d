@@ -7,11 +7,27 @@ layout(constant_id = 1) const uint NY = 128u;
 layout(std430, binding = 0) buffer UField { float data[]; } u;
 layout(std430, binding = 1) buffer VField { float data[]; } v;
 layout(std430, binding = 11) buffer ForceField { uint data[]; } force;
+layout(std430, binding = 12) buffer MaskBuf { float data[]; } mask;
+
+bool isObstacle(uint ci, uint cj) {
+    return mask.data[(ci + cj * NX) * 2u] > 0.5;
+}
 
 // ---------- 主函数：施加累加的力到速度场并清零 ----------
 void main() {
     uint gidx = gl_GlobalInvocationID.x;
     if (gidx >= NX * NY) return;
+
+    uint i = gidx % NX;
+    uint j = gidx / NX;
+
+    if (isObstacle(i, j)) {
+        u.data[gidx] = 0.0;
+        v.data[gidx] = 0.0;
+        force.data[gidx * 2u] = 0u;
+        force.data[gidx * 2u + 1u] = 0u;
+        return;
+    }
 
     float fu = uintBitsToFloat(force.data[gidx * 2u]);
     float fv = uintBitsToFloat(force.data[gidx * 2u + 1u]);
