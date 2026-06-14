@@ -17,6 +17,10 @@ namespace rtfs2d {
 
 class DeviceManager;
 
+//TODO 这个应当放入配置模块
+enum class VisField { kSpeed = 0, kPressure = 1, kVorticity = 2 };
+enum class VisGradient { kGray = 0, kJet = 1, kCoolWarm = 2 };
+
 class ComputeContext {
 public:
     explicit ComputeContext(DeviceManager& dm, const GridParams& params);
@@ -63,6 +67,12 @@ public:
     const vk::raii::PipelineLayout& pipeline_layout() const { return *pipeline_layout_; }
     BoundaryContext& boundary_ctx() const { return *boundary_ctx_; }
     uint32_t ibm_marker_count() const { return ibm_marker_count_; }
+    VisField vis_field() const { return vis_field_; }
+    VisGradient vis_gradient() const { return vis_gradient_; }
+
+    //setter
+    void set_vis_field(VisField field) { vis_field_ = field; }
+    void set_vis_gradient(VisGradient gradient) { vis_gradient_ = gradient; }
 private:
     DeviceManager* dm_;
     // v0, v1, v2, v3, v4, v5, bc1, bc2, bc3, bc4, poly, marker, force, mask
@@ -76,6 +86,8 @@ private:
     const vk::DeviceSize compute_buf_size_;
     std::unique_ptr<BoundaryContext> boundary_ctx_;
     uint32_t ibm_marker_count_{};
+    VisField vis_field_;
+    VisGradient vis_gradient_;
 
     void CreateBuffers() const;
     void CreateDescriptorSets();

@@ -4,7 +4,10 @@ layout(location = 0) in vec2 fragUV;
 layout(location = 0) out vec4 outColor;
 layout(constant_id = 0) const uint NX = 128u;
 layout(constant_id = 1) const uint NY = 128u;
-layout(constant_id = 2) const uint GRADIENT = 0u;
+layout(push_constant) uniform VisParams {
+    uint gradientType;
+    uint visMode;
+} vis;
 
 layout(set = 0, binding = 2, std430) buffer ScalarBuffer { float s[]; };
 layout(set = 0, binding = 12, std430) buffer MaskBuf { float data[]; } mask;
@@ -63,9 +66,9 @@ void main() {
     float scalar = clamp(s[midx], 0.0, 1.0);
 
     vec3 color;
-    if (GRADIENT == 0u) {
+    if (vis.gradientType == 0u) {
         color = GrayScale(scalar);
-    } else if (GRADIENT == 1u) {
+    } else if (vis.gradientType == 1u) {
         color = Jet(scalar);
     } else {
         color = CoolWarm(scalar);

@@ -314,27 +314,24 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) 
     fluid_solvers_->SolveProjection(cb, DescriptorSetAt(kSetProjection));
     // [0(u), 1(v), 2(div), 3, 4(p)]
 
-    int mode = 2;
-    if (mode == 2) {
+    if (vis_field_ == VisField::kVorticity) {
         // 平滑速度场以消除涡量可视化中的锯齿
         // u_src, v_src → u_dst, v_dst
         // [0(u_src), 1(v_src), 2(scalar), 3(u_sm), 4, 5(v_sm)]
         EnsureBufferReadyForCompute(cb, buffers::kBufV0);
         EnsureBufferReadyForCompute(cb, buffers::kBufV1);
         fluid_solvers_->SmoothVelocity(cb, DescriptorSetAt(kSetSmoothVelocity));
-    }
-
-    // 计算用于可视化的标量场 u, v, p → scalar
-    if (mode == 2) {
         // [0, 1, 2(scalar), 3(u_sm), 4, 5(v_sm)]
         EnsureBufferReadyForCompute(cb, buffers::kBufV3);
         EnsureBufferReadyForCompute(cb, buffers::kBufV5);
-        fluid_solvers_->ComputeScalar(cb, DescriptorSetAt(kSetComputeScalarVI), mode);
+        fluid_solvers_->ComputeScalar(cb, DescriptorSetAt(kSetComputeScalarVI),
+            static_cast<uint32_t>(vis_field_));
     } else {
         // [0(u), 1(v), 2(scalar), 3, 4(p)]
         EnsureBufferReadyForCompute(cb, buffers::kBufV0);
         EnsureBufferReadyForCompute(cb, buffers::kBufV1);
-        fluid_solvers_->ComputeScalar(cb, DescriptorSetAt(kSetComputeScalarOthers), mode);
+        fluid_solvers_->ComputeScalar(cb, DescriptorSetAt(kSetComputeScalarOthers),
+            static_cast<uint32_t>(vis_field_));
     }
     EnsureBufferReady(vk::PipelineStageFlagBits::eComputeShader,
         vk::PipelineStageFlagBits::eFragmentShader, cb, buffers::kBufV2);
@@ -490,15 +487,19 @@ void ComputeContext::DebugReadBackBoundaryBuffer(int buffer) const {
 void ComputeContext::AddDebugGeometry() {
     ObstacleGeometry geom;
     std::vector<std::array<float,2>> points;
-    for (float rad = 0; rad < 2 * M_PI; rad += M_PI / 16.0f) {
-        float r =  0.05f;
-        float y0 = 0.5f;
-        float x0 = 0.1f;
-        points.push_back({
-            x0 + r * std::cos(rad),
-            y0 + r * std::sin(rad)
-        });
-    }
+    // for (float rad = 0; rad < 2 * M_PI; rad += M_PI / 16.0f) {
+    //     float r =  0.05f;
+    //     float y0 = 0.5f;
+    //     float x0 = 0.1f;
+    //     points.push_back({
+    //         x0 + r * std::cos(rad),
+    //         y0 + r * std::sin(rad)
+    //     });
+    // }
+    points.push_back({0.15, 0.45});
+    points.push_back({0.15, 0.55});
+    points.push_back({0.25, 0.55});
+    points.push_back({0.25, 0.45});
     geom.AddObstacle(points);
     geom.GenerateIBMMarkers(grid_params_.dx);
     UploadObstacles(geom);

@@ -20,7 +20,8 @@ GraphicsContext::GraphicsContext(DeviceManager& dm, SwapchainContext& sc, Comput
     CreateGraphicsPipeline();
 }
 
-void GraphicsContext::RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t img_idx) const {
+void GraphicsContext::RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t img_idx,
+        uint32_t gradient_type, uint32_t vis_mode) const {
     cb.reset();
     cb.begin({});
 
@@ -71,6 +72,9 @@ void GraphicsContext::RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t
         **graphics_pipeline_layout_, 0,
         *cc_->DescriptorSetAt(ComputeContext::kSetVisualization), nullptr);
 
+    cb.pushConstants<uint32_t>(**graphics_pipeline_layout_,
+        vk::ShaderStageFlagBits::eFragment, 0, {gradient_type, vis_mode});
+
     // 绘制全屏三角形（3个顶点）
     cb.draw(3, 1, 0, 0);
 
@@ -97,13 +101,11 @@ void GraphicsContext::CreateGraphicsPipeline() {
     std::vector<vk::SpecializationMapEntry> mes = {
         {0, 0, sizeof(uint32_t)},   // constant_id 0 -> NX
         {1, sizeof(uint32_t), sizeof(uint32_t)},  // constant_id 1 -> NY
-        {2, sizeof(uint32_t) * 2, sizeof(uint32_t)}  // constant_id 2 -> GRADIENT
     };
     std::vector<uint8_t> bytes;
-    bytes.reserve(3 * sizeof(uint32_t));
+    bytes.reserve(2 * sizeof(uint32_t));
     AppendDataToBytesVec<uint32_t>(bytes, params.nx);
     AppendDataToBytesVec<uint32_t>(bytes, params.ny);
-    AppendDataToBytesVec<uint32_t>(bytes, 1);
 
     vk::SpecializationInfo specInfo{};
     specInfo.setMapEntries(mes)
@@ -161,10 +163,16 @@ void GraphicsContext::CreateGraphicsPipeline() {
     vk::PipelineDynamicStateCreateInfo dynamicState{};
     dynamicState.setDynamicStates(dynamicStates);
 
+    vk::PushConstantRange pcr{};
+    pcr.setStageFlags(vk::ShaderStageFlagBits::eFragment)
+        .setOffset(0)
+        .setSize(2 * sizeof(uint32_t));
+
     // 管线布局
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.setSetLayoutCount(1)
-        .setPSetLayouts(&*cc_->descriptor_set_layout());
+        .setPSetLayouts(&*cc_->descriptor_set_layout())
+        .setPushConstantRanges(pcr);
 
     graphics_pipeline_layout_ = std::make_unique<vk::raii::PipelineLayout>(
         dm_->device().createPipelineLayout(pipelineLayoutInfo)

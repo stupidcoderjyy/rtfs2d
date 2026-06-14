@@ -85,7 +85,8 @@ void Window::Show() {
             }
 
             const auto& cb = swapchain_ctx_->command_buffers()[current_frame_ + 2];
-            graphics_ctx_->RecordCommands(cb, img_idx);
+            graphics_ctx_->RecordCommands(cb, img_idx,
+                static_cast<uint32_t>(compute_ctx_->vis_gradient()), 0);
 
             // 提交命令缓冲区。GPU会等待，直到图像就绪（acquire_sem被激活），CPU端会立刻返回，并准备下一帧的内容
             // 需要为每个飞行帧准备独立的acquire_sem

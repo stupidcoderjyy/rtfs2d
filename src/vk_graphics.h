@@ -16,7 +16,8 @@ class ComputeContext;
 class GraphicsContext {
 public:
     GraphicsContext(DeviceManager& dm, SwapchainContext& sc, ComputeContext& cc);
-    void RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t img_idx) const;
+    void RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t img_idx,
+        uint32_t gradient_type, uint32_t vis_mode) const;
 
 private:
     DeviceManager* dm_;
