@@ -43,7 +43,8 @@ public:
         kSetSmoothVelocity,         // 平滑速度场（仅用于漩涡强度）
         kSetComputeScalarVI,        // 漩涡强度计算
         kSetComputeScalarOthers,    // 其他可视化标量计算
-        kSetVisualization           // 可视化
+        kSetDyeAdvection,           // 染料平流，用于实现染料可视化
+        kSetVisualization,          // 可视化
     };
 
     void EnsureBufferReady(

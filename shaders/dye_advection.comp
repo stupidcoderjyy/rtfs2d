@@ -1,0 +1,117 @@
+#version 450
+
+layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+layout(constant_id = 0) const uint NX = 128u;
+layout(constant_id = 1) const uint NY = 128u;
+const float DT = 0.016;
+
+layout(std430, binding = 0)  buffer USrc    { float data[]; } u;
+layout(std430, binding = 1)  buffer VSrc    { float data[]; } v;
+layout(std430, binding = 13) buffer DyeSrc  { float data[]; } dye_src;
+layout(std430, binding = 14) buffer DyeDst  { float data[]; } dye_dst;
+
+layout(std430, binding = 5) buffer LeftB   { uint data[]; } left;
+layout(std430, binding = 6) buffer RightB  { uint data[]; } right;
+layout(std430, binding = 7) buffer BottomB { uint data[]; } bottom;
+layout(std430, binding = 8) buffer TopB    { uint data[]; } top;
+
+float border_velocity(float vi, bool is_u, int edge, uint local) {
+    uint bi = local * 3u;
+    uint type;
+    float bc_u, bc_v;
+    if (edge == 0) {
+        type = left.data[bi];
+        bc_u = uintBitsToFloat(left.data[bi+1u]);
+        bc_v = uintBitsToFloat(left.data[bi+2u]);
+    } else if (edge == 1) {
+        type = right.data[bi];
+        bc_u = uintBitsToFloat(right.data[bi+1u]);
+        bc_v = uintBitsToFloat(right.data[bi+2u]);
+    } else if (edge == 2) {
+        type = bottom.data[bi];
+        bc_u = uintBitsToFloat(bottom.data[bi+1u]);
+        bc_v = uintBitsToFloat(bottom.data[bi+2u]);
+    } else {
+        type = top.data[bi];
+        bc_u = uintBitsToFloat(top.data[bi+1u]);
+        bc_v = uintBitsToFloat(top.data[bi+2u]);
+    }
+    switch (type) {
+        case 0: return 0.0;
+        case 1: return ((edge <= 1) == is_u) ? 0.0 : vi;
+        case 2: return is_u ? bc_u : bc_v;
+        case 3: {
+            bool is_normal = ((edge <= 1) == is_u);
+            if (is_normal) {
+                bool entering;
+                if (edge == 0) entering = (vi > 0.0);
+                else if (edge == 1) entering = (vi < 0.0);
+                else if (edge == 2) entering = (vi > 0.0);
+                else entering = (vi < 0.0);
+                if (entering) return 0.0;
+            }
+            return vi;
+        }
+    }
+    return 0.0;
+}
+
+float getU(int i, int j) {
+    if (i >= 0 && i < int(NX) && j >= 0 && j < int(NY))
+        return u.data[uint(i) + uint(j) * NX];
+    int ci = clamp(i, 0, int(NX) - 1);
+    int cj = clamp(j, 0, int(NY) - 1);
+    float vi = u.data[uint(ci) + uint(cj) * NX];
+    int edge; uint local;
+    if (i < 0)          { edge = 0; local = uint(cj); }
+    else if (i >= int(NX)) { edge = 1; local = uint(cj); }
+    else if (j < 0)     { edge = 2; local = uint(ci); }
+    else                { edge = 3; local = uint(ci); }
+    return border_velocity(vi, true, edge, local);
+}
+
+float getV(int i, int j) {
+    if (i >= 0 && i < int(NX) && j >= 0 && j < int(NY))
+        return v.data[uint(i) + uint(j) * NX];
+    int ci = clamp(i, 0, int(NX) - 1);
+    int cj = clamp(j, 0, int(NY) - 1);
+    float vi = v.data[uint(ci) + uint(cj) * NX];
+    int edge; uint local;
+    if (i < 0)          { edge = 0; local = uint(cj); }
+    else if (i >= int(NX)) { edge = 1; local = uint(cj); }
+    else if (j < 0)     { edge = 2; local = uint(ci); }
+    else                { edge = 3; local = uint(ci); }
+    return border_velocity(vi, false, edge, local);
+}
+
+float sampleBilinearDye(float x, float y) {
+    x = clamp(x, 0.0, float(NX) - 1.0);
+    y = clamp(y, 0.0, float(NY) - 1.0);
+    uint ix0 = uint(floor(x)), ix1 = min(ix0 + 1u, NX - 1u);
+    uint iy0 = uint(floor(y)), iy1 = min(iy0 + 1u, NY - 1u);
+    float v00 = dye_src.data[ix0 + iy0 * NX];
+    float v10 = dye_src.data[ix1 + iy0 * NX];
+    float v01 = dye_src.data[ix0 + iy1 * NX];
+    float v11 = dye_src.data[ix1 + iy1 * NX];
+    float tx = x - float(ix0), ty = y - float(iy0);
+    return mix(mix(v00, v10, tx), mix(v01, v11, tx), ty);
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= NX * NY) return;
+
+    float dx = 1.0 / float(NX);
+    uint i = idx % NX;
+    uint j = idx / NX;
+
+    float vel_u = getU(int(i), int(j));
+    float vel_v = getV(int(i), int(j));
+
+    float bx = float(i) + 0.5 - vel_u * DT / dx;
+    float by = float(j) + 0.5 - vel_v * DT / dx;
+    float sx = bx - 0.5;
+    float sy = by - 0.5;
+
+    dye_dst.data[idx] = sampleBilinearDye(sx, sy);
+}

@@ -15,6 +15,7 @@ set(SHADER_SOURCES
         ibm_mask.comp
         compute_scalar.comp
         smooth_velocity.comp
+        dye_advection.comp
 )
 
 find_program(GLSLC glslc HINTS "${LIB_PREFIX_PATH}/bin")
