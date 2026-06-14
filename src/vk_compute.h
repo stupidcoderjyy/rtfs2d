@@ -22,6 +22,7 @@ public:
     explicit ComputeContext(DeviceManager& dm, const GridParams& params);
     void RecordAndSubmit(const vk::raii::CommandBuffer& cb) const;
 
+    //TODO Buffer、DescriptorSet是整个程序共用的，应当分离成独立的模块
     enum DescriptorSetIndex {
         kSetAdvection,         // 平流
         kSetVorticity,         // 涡量约束
@@ -35,10 +36,19 @@ public:
         kSetIbmInterpolate,
         kSetIbmMask,
         kSetIbmSpreadMarkers,
+        kSetComputeScalar,     // 标量计算（用于可视化）
         kSetVisualization      // 可视化
     };
 
-    void AddBufferMemoryWriteReadBarrier(const vk::raii::CommandBuffer& cb, int buf) const;
+    void EnsureBufferReady(
+        vk::PipelineStageFlagBits src_stage,
+        vk::PipelineStageFlagBits dst_stage,
+        const vk::raii::CommandBuffer& cb, int buf) const;
+
+    void EnsureBufferReadyForCompute(const vk::raii::CommandBuffer& cb, int buf) const {
+        EnsureBufferReady(vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eComputeShader, cb, buf);
+    }
 
     // getter
     const vk::raii::DescriptorSet& DescriptorSetAt(DescriptorSetIndex idx) const {

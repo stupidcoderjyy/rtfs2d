@@ -42,7 +42,9 @@ void ComputeContext::RecordAndSubmit(const vk::raii::CommandBuffer& cb) const {
     dm_->graphics_queue().submit(si);
 }
 
-void ComputeContext::AddBufferMemoryWriteReadBarrier(
+void ComputeContext::EnsureBufferReady(
+        vk::PipelineStageFlagBits src_stage,
+        vk::PipelineStageFlagBits dst_stage,
         const vk::raii::CommandBuffer &cb, int buf) const {
     vk::BufferMemoryBarrier barrier{};
     barrier.setSrcAccessMask(vk::AccessFlagBits::eShaderWrite)
@@ -52,8 +54,7 @@ void ComputeContext::AddBufferMemoryWriteReadBarrier(
         .setOffset(0)
         .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
         .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
-    cb.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
-        vk::PipelineStageFlagBits::eComputeShader,
+    cb.pipelineBarrier(src_stage, dst_stage,
         {}, nullptr, {barrier}, nullptr);
 }
 
@@ -189,10 +190,13 @@ void ComputeContext::CreateDescriptorSets() {
         }, {kSetIbmSpreadMarkers,
             10, buffers::kBufIbmMarker,
             11, buffers::kBufIbmForce,
-        }, {kSetVisualization,
+        }, {kSetComputeScalar,
             0, buffers::kBufV0 /* u_src */,
             1, buffers::kBufV1 /* v_src */,
-            2, buffers::kBufV4 /*   p   */,
+            2, buffers::kBufV3 /* scalar*/,
+            3, buffers::kBufV4 /*   p   */,
+        }, {kSetVisualization,
+            2, buffers::kBufV3 /* scalar*/,
             12, buffers::kBufIbmMask,
         }
     };
@@ -222,27 +226,27 @@ void ComputeContext::CreatePipelineLayout() {
 
 void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) const {
     // u, v, markers → markers
-    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV0);
-    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV1);
-    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufIbmMarker);
+    EnsureBufferReadyForCompute(cb, buffers::kBufV0);
+    EnsureBufferReadyForCompute(cb, buffers::kBufV1);
+    EnsureBufferReadyForCompute(cb, buffers::kBufIbmMarker);
     fluid_solvers_->SolveIBMInterpolate(cb, DescriptorSetAt(kSetIbmInterpolate));
     // markers → force
-    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufIbmMarker);
+    EnsureBufferReadyForCompute(cb, buffers::kBufIbmMarker);
     fluid_solvers_->SolveIBMSpread(cb, DescriptorSetAt(kSetIbmSpreadMarkers));
     // force → u, v
-    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufIbmForce);
+    EnsureBufferReadyForCompute(cb, buffers::kBufIbmForce);
     fluid_solvers_->SolveIBMApplyForce(cb, DescriptorSetAt(kSetIbmApplyForce));
 
     // 平流
     // [0(u), 1(v), 2, 3, 4]
-    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV0);
-    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV1);
+    EnsureBufferReadyForCompute(cb, buffers::kBufV0);
+    EnsureBufferReadyForCompute(cb, buffers::kBufV1);
     fluid_solvers_->SolveAdvection(cb, DescriptorSetAt(kSetAdvection));
 
     // 涡量约束
     // [0(u), 1(v), 2, 3, 4]
-    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV0);
-    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV1);
+    EnsureBufferReadyForCompute(cb, buffers::kBufV0);
+    EnsureBufferReadyForCompute(cb, buffers::kBufV1);
     fluid_solvers_->SolveVorticity(cb, DescriptorSetAt(kSetVorticity), 0.5f);
 
     // 扩散迭代（u 和 v 各做一次雅可比迭代）
@@ -254,14 +258,14 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) 
     for (int iter = 0; iter < 21; ++iter) {
         if (iter & 1) {
             // [0(u), 1(v), 2, 3, 4]
-            AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV0);
-            AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV1);
+            EnsureBufferReadyForCompute(cb, buffers::kBufV0);
+            EnsureBufferReadyForCompute(cb, buffers::kBufV1);
             fluid_solvers_->SolveDiffusion(cb, DescriptorSetAt(kSetDiffusionOdd), alpha, beta);
             // [0, 1, 2(u), 3(v), 4]
         } else {
             // [0, 1, 2(u), 3(v), 4]
-            AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV2);
-            AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV3);
+            EnsureBufferReadyForCompute(cb, buffers::kBufV2);
+            EnsureBufferReadyForCompute(cb, buffers::kBufV3);
             fluid_solvers_->SolveDiffusion(cb, DescriptorSetAt(kSetDiffusionEven), alpha, beta);
             // [0(u), 1(v), 2, 3, 4] -> 退出循环 | 进入另一个分支
         }
@@ -269,32 +273,40 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) 
 
     // 散度计算
     // [0(u), 1(v), 2(div), 3, 4]
-    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV0);
-    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV1);
+    EnsureBufferReadyForCompute(cb, buffers::kBufV0);
+    EnsureBufferReadyForCompute(cb, buffers::kBufV1);
     fluid_solvers_->SolveDivergence(cb, DescriptorSetAt(kSetDivergence));
 
-    // 压力求解迭代（雅可比迭代解泊松方程）
+    // 压力求解迭代（雅可比迭代解泊松方程） u, v, div → p
     float alpha_p = -(dx * dx);
     for (int iter = 0; iter < 50; ++iter) {
         float beta_p = 4.0f;
         if (iter & 1) {
             //[0(u), 1(v), 2(div), 3(pi), 4(po)]
-            AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV3);
+            EnsureBufferReadyForCompute(cb, buffers::kBufV3);
             fluid_solvers_->SolvePoisson(cb, DescriptorSetAt(kSetPressureOdd), alpha_p, beta_p);
             //[0(u), 1(v), 2(div), 3, 4(pi)] -> 退出循环
         } else {
             //[0(u), 1(v), 2(div), 3(po), 4(pi)]
-            AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV4);
+            EnsureBufferReadyForCompute(cb, buffers::kBufV4);
             fluid_solvers_->SolvePoisson(cb, DescriptorSetAt(kSetPressureEven), alpha_p, beta_p);
             //[0(u), 1(v), 2(div), 3(pi), 4]
         }
     }
 
-    // 压力投影
+    // 压力投影 p → u,v
     // [0(u), 1(v), 2(div), 3, 4(p)]
-    AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV4);
+    EnsureBufferReadyForCompute(cb, buffers::kBufV4);
     fluid_solvers_->SolveProjection(cb, DescriptorSetAt(kSetProjection));
     // [0(u), 1(v), 2(div), 3, 4(p)]
+
+    // 计算用于可视化的标量场 u, v, p → scalar
+    // [0(u), 1(v), 2, 3(scalar), 4(p)]
+    EnsureBufferReadyForCompute(cb, buffers::kBufV0);
+    EnsureBufferReadyForCompute(cb, buffers::kBufV1);
+    fluid_solvers_->ComputeScalar(cb, DescriptorSetAt(kSetComputeScalar));
+    EnsureBufferReady(vk::PipelineStageFlagBits::eComputeShader,
+        vk::PipelineStageFlagBits::eFragmentShader, cb, buffers::kBufV3);
 }
 
 void ComputeContext::InitializeVortexField() const {
@@ -374,7 +386,7 @@ void ComputeContext::DebugReadBackVelocityBuffer(
         int buffer,
         const std::string& log_prefix) const {
     // 提交并等待
-    AddBufferMemoryWriteReadBarrier(cb, buffer);
+    EnsureBufferReadyForCompute(cb, buffer);
     cb.end();
     vk::SubmitInfo si1{};
     si1.setCommandBuffers(*cb);
@@ -404,7 +416,7 @@ void ComputeContext::DebugReadBackVelocityBufferPoints(const vk::raii::Queue &qu
         const std::string &log_prefix, const std::vector<int> &indexes) const {
 
     // 提交并等待
-    AddBufferMemoryWriteReadBarrier(cb, buffer);
+    EnsureBufferReadyForCompute(cb, buffer);
     cb.end();
     vk::SubmitInfo si1{};
     si1.setCommandBuffers(*cb);
