@@ -27,7 +27,7 @@ void FluidSolvers::SolveAdvection(
     cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_advection_);
     cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *cc_->pipeline_layout(),
         0, *ds, nullptr);
-    int group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
+    uint32_t group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
     cb.dispatch(group_count, 1, 1);
 }
 
@@ -35,7 +35,7 @@ void FluidSolvers::SolveDivergence(const vk::raii::CommandBuffer &cb, const vk::
     cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_divergence_);
     cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *cc_->pipeline_layout(),
         0, *ds, nullptr);
-    int group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
+    uint32_t group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
     cb.dispatch(group_count, 1, 1);
 }
 
@@ -46,7 +46,7 @@ void FluidSolvers::SolveDiffusion(const vk::raii::CommandBuffer &cb, const vk::r
         0, *ds, nullptr);
     cb.pushConstants<float>(*pipeline_layout_diffusion_,
         vk::ShaderStageFlagBits::eCompute, 0, {alpha, beta});
-    int group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
+    uint32_t group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
     cb.dispatch(group_count, 1, 1);
 }
 
@@ -57,7 +57,7 @@ void FluidSolvers::SolvePoisson(const vk::raii::CommandBuffer &cb, const vk::rai
         0, *ds, nullptr);
     cb.pushConstants<float>(*pipeline_layout_poisson_,
         vk::ShaderStageFlagBits::eCompute, 0, {alpha, beta});
-    int group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
+    uint32_t group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
     cb.dispatch(group_count, 1, 1);
 }
 
@@ -65,7 +65,7 @@ void FluidSolvers::SolveProjection(const vk::raii::CommandBuffer &cb, const vk::
     cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_projection_);
     cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *cc_->pipeline_layout(),
         0, *ds, nullptr);
-    int group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
+    uint32_t group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
     cb.dispatch(group_count, 1, 1);
 }
 
@@ -76,7 +76,7 @@ void FluidSolvers::SolveVorticity(const vk::raii::CommandBuffer &cb,
         0, *ds, nullptr);
     cb.pushConstants<float>(**pipeline_layout_vorticity_, vk::ShaderStageFlagBits::eCompute,
         0, {epsilon});
-    int group_count = (cc_->cell_count() + 127) / 128;
+    uint32_t group_count = (cc_->cell_count() + 127) / 128;
     cb.dispatch(group_count, 1, 1);
 }
 
@@ -84,7 +84,7 @@ void FluidSolvers::SolveIBMInterpolate(const vk::raii::CommandBuffer &cb, const 
     cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_ibm_interpolate_);
     cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *cc_->pipeline_layout(),
         0, *ds, nullptr);
-    int group_count = (cc_->ibm_marker_count() + kWorkGroupSize - 1) / kWorkGroupSize;
+    uint32_t group_count = (cc_->ibm_marker_count() + kWorkGroupSize - 1) / kWorkGroupSize;
     cb.dispatch(group_count, 1, 1);
 }
 
@@ -92,7 +92,7 @@ void FluidSolvers::SolveIBMSpread(const vk::raii::CommandBuffer &cb, const vk::r
     cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_ibm_spread_);
     cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *cc_->pipeline_layout(),
         0, *ds, nullptr);
-    int group_count = (cc_->ibm_marker_count() + kWorkGroupSize - 1) / kWorkGroupSize;
+    uint32_t group_count = (cc_->ibm_marker_count() + kWorkGroupSize - 1) / kWorkGroupSize;
     cb.dispatch(group_count, 1, 1);
 }
 
@@ -100,7 +100,7 @@ void FluidSolvers::SolveIBMApplyForce(const vk::raii::CommandBuffer &cb, const v
     cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_ibm_apply_force_);
     cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *cc_->pipeline_layout(),
         0, *ds, nullptr);
-    int group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
+    uint32_t group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
     cb.dispatch(group_count, 1, 1);
 }
 
@@ -108,7 +108,7 @@ void FluidSolvers::PrecomputeIBMMask(const vk::raii::CommandBuffer &cb, const vk
     cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_ibm_mask_);
     cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *cc_->pipeline_layout(),
         0, *ds, nullptr);
-    int group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
+    uint32_t group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
     cb.dispatch(group_count, 1, 1);
 }
 

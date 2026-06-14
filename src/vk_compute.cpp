@@ -38,6 +38,7 @@ void ComputeContext::RecordAndSubmit(const vk::raii::Queue& queue) const {
         .setCommandBufferCount(1)
         .setLevel(vk::CommandBufferLevel::ePrimary);
     auto cbs = dm_->device().allocateCommandBuffers(ai);
+    //TODO CommandBuffer不用每帧创建
     auto& cb = cbs[0];
     // 录制模拟任务
     RecordFluidStepCommands(queue, cb);
