@@ -304,7 +304,7 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) 
     // [0(u), 1(v), 2, 3(scalar), 4(p)]
     EnsureBufferReadyForCompute(cb, buffers::kBufV0);
     EnsureBufferReadyForCompute(cb, buffers::kBufV1);
-    fluid_solvers_->ComputeScalar(cb, DescriptorSetAt(kSetComputeScalar));
+    fluid_solvers_->ComputeScalar(cb, DescriptorSetAt(kSetComputeScalar), 0);
     EnsureBufferReady(vk::PipelineStageFlagBits::eComputeShader,
         vk::PipelineStageFlagBits::eFragmentShader, cb, buffers::kBufV3);
 }

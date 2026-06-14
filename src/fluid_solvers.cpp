@@ -19,7 +19,7 @@ FluidSolvers::FluidSolvers(DeviceManager &dm, ComputeContext &cc): dm_(&dm), cc_
     pipeline_ibm_spread_ = CreateSolverPipeline("shaders/ibm_spread_markers.comp.spv");
     pipeline_ibm_apply_force_ = CreateSolverPipeline("shaders/ibm_apply_force.comp.spv");
     pipeline_ibm_mask_ = CreateSolverPipeline("shaders/ibm_mask.comp.spv");
-    pipeline_compute_scalar_ = CreateSolverPipeline("shaders/compute_scalar.comp.spv");
+    CreateComputeScalarPipeline();
 }
 
 void FluidSolvers::SolveAdvection(
@@ -43,9 +43,9 @@ void FluidSolvers::SolveDivergence(const vk::raii::CommandBuffer &cb, const vk::
 void FluidSolvers::SolveDiffusion(const vk::raii::CommandBuffer &cb, const vk::raii::DescriptorSet &ds,
         float alpha, float beta) const {
     cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_diffusion_);
-    cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *pipeline_layout_diffusion_,
+    cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *layout_diffusion_,
         0, *ds, nullptr);
-    cb.pushConstants<float>(*pipeline_layout_diffusion_,
+    cb.pushConstants<float>(*layout_diffusion_,
         vk::ShaderStageFlagBits::eCompute, 0, {alpha, beta});
     uint32_t group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
     cb.dispatch(group_count, 1, 1);
@@ -54,9 +54,9 @@ void FluidSolvers::SolveDiffusion(const vk::raii::CommandBuffer &cb, const vk::r
 void FluidSolvers::SolvePoisson(const vk::raii::CommandBuffer &cb, const vk::raii::DescriptorSet &ds,
         float alpha, float beta) const {
     cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_poisson_);
-    cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *pipeline_layout_poisson_,
+    cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *layout_poisson_,
         0, *ds, nullptr);
-    cb.pushConstants<float>(*pipeline_layout_poisson_,
+    cb.pushConstants<float>(*layout_poisson_,
         vk::ShaderStageFlagBits::eCompute, 0, {alpha, beta});
     uint32_t group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
     cb.dispatch(group_count, 1, 1);
@@ -73,9 +73,9 @@ void FluidSolvers::SolveProjection(const vk::raii::CommandBuffer &cb, const vk::
 void FluidSolvers::SolveVorticity(const vk::raii::CommandBuffer &cb,
         const vk::raii::DescriptorSet &ds, float epsilon) const {
     cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_vorticity_);
-    cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, **pipeline_layout_vorticity_,
+    cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, **layout_vorticity_,
         0, *ds, nullptr);
-    cb.pushConstants<float>(**pipeline_layout_vorticity_, vk::ShaderStageFlagBits::eCompute,
+    cb.pushConstants<float>(**layout_vorticity_, vk::ShaderStageFlagBits::eCompute,
         0, {epsilon});
     uint32_t group_count = (cc_->cell_count() + 127) / 128;
     cb.dispatch(group_count, 1, 1);
@@ -113,10 +113,13 @@ void FluidSolvers::PrecomputeIBMMask(const vk::raii::CommandBuffer &cb, const vk
     cb.dispatch(group_count, 1, 1);
 }
 
-void FluidSolvers::ComputeScalar(const vk::raii::CommandBuffer &cb, const vk::raii::DescriptorSet &ds) const {
+void FluidSolvers::ComputeScalar(const vk::raii::CommandBuffer &cb,
+        const vk::raii::DescriptorSet &ds, uint32_t mode) const {
     cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_compute_scalar_);
-    cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *cc_->pipeline_layout(),
+    cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *layout_compute_scalar_,
         0, *ds, nullptr);
+    cb.pushConstants<uint32_t>(**layout_compute_scalar_, vk::ShaderStageFlagBits::eCompute,
+        0, {mode});
     uint32_t group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
     cb.dispatch(group_count, 1, 1);
 }
@@ -127,9 +130,10 @@ std::unique_ptr<vk::raii::Pipeline> FluidSolvers::CreateSolverPipeline(const std
         {0, 0, sizeof(uint32_t)},   // constant_id 0 -> NX
         {1, sizeof(uint32_t), sizeof(uint32_t)}  // constant_id 1 -> NY
     };
-    std::vector<uint8_t> bytes(2 * sizeof(uint32_t));
-    memcpy(bytes.data(), &params.nx, sizeof(uint32_t));
-    memcpy(bytes.data() + sizeof(uint32_t), &params.ny, sizeof(uint32_t));
+    std::vector<uint8_t> bytes;
+    bytes.reserve(2 * sizeof(uint32_t));
+    AppendDataToBytesVec<uint32_t>(bytes, params.nx);
+    AppendDataToBytesVec<uint32_t>(bytes, params.ny);
     return dm_->CreateComputePipelineFromFile(
         cc_->pipeline_layout(), shader, mes, bytes);
 }
@@ -148,17 +152,18 @@ void FluidSolvers::CreateJacobiPipelines() {
         {0, 0, sizeof(uint32_t)},   // constant_id 0 -> NX
         {1, sizeof(uint32_t), sizeof(uint32_t)}  // constant_id 1 -> NY
     };
-    std::vector<uint8_t> bytes(2 * sizeof(uint32_t));
-    memcpy(bytes.data(), &params.nx, sizeof(uint32_t));
-    memcpy(bytes.data() + sizeof(uint32_t), &params.ny, sizeof(uint32_t));
-    pipeline_layout_diffusion_ = std::make_unique<vk::raii::PipelineLayout>(
+    std::vector<uint8_t> bytes;
+    bytes.reserve(2 * sizeof(uint32_t));
+    AppendDataToBytesVec<uint32_t>(bytes, params.nx);
+    AppendDataToBytesVec<uint32_t>(bytes, params.ny);
+    layout_diffusion_ = std::make_unique<vk::raii::PipelineLayout>(
         dm_->device().createPipelineLayout(ci));
-    pipeline_layout_poisson_ = std::make_unique<vk::raii::PipelineLayout>(
+    layout_poisson_ = std::make_unique<vk::raii::PipelineLayout>(
         dm_->device().createPipelineLayout(ci));
     pipeline_diffusion_ = dm_->CreateComputePipelineFromFile(
-        *pipeline_layout_diffusion_, "shaders/diffusion.comp.spv", mes, bytes);
+        *layout_diffusion_, "shaders/diffusion.comp.spv", mes, bytes);
     pipeline_poisson_ = dm_->CreateComputePipelineFromFile(
-        *pipeline_layout_poisson_, "shaders/poisson.comp.spv", mes, bytes);
+        *layout_poisson_, "shaders/poisson.comp.spv", mes, bytes);
 }
 
 void FluidSolvers::CreateVorticitySolverPipeline() {
@@ -167,10 +172,10 @@ void FluidSolvers::CreateVorticitySolverPipeline() {
         {0, 0, sizeof(uint32_t)},   // constant_id 0 -> NX
         {1, sizeof(uint32_t), sizeof(uint32_t)}  // constant_id 1 -> NY
     };
-    std::vector<uint8_t> bytes(2 * sizeof(uint32_t));
-    memcpy(bytes.data(), &params.nx, sizeof(uint32_t));
-    memcpy(bytes.data() + sizeof(uint32_t), &params.ny, sizeof(uint32_t));
-
+    std::vector<uint8_t> bytes;
+    bytes.reserve(2 * sizeof(uint32_t));
+    AppendDataToBytesVec<uint32_t>(bytes, params.nx);
+    AppendDataToBytesVec<uint32_t>(bytes, params.ny);
     vk::PushConstantRange push_range{};
     push_range.setStageFlags(vk::ShaderStageFlagBits::eCompute)
         .setOffset(0)
@@ -182,10 +187,36 @@ void FluidSolvers::CreateVorticitySolverPipeline() {
         .setPushConstantRangeCount(1)
         .setPPushConstantRanges(&push_range);
 
-    pipeline_layout_vorticity_ = std::make_unique<vk::raii::PipelineLayout>(
+    layout_vorticity_ = std::make_unique<vk::raii::PipelineLayout>(
         dm_->device().createPipelineLayout(layout_ci));
     pipeline_vorticity_ = dm_->CreateComputePipelineFromFile(
-        *pipeline_layout_vorticity_, "shaders/vorticity.comp.spv");
+        *layout_vorticity_, "shaders/vorticity.comp.spv");
 }
 
-}  // namespace rtfs2d
+void FluidSolvers::CreateComputeScalarPipeline() {
+    const auto& params = cc_->grid_params();
+    std::vector<vk::SpecializationMapEntry> mes = {
+        {0, 0, sizeof(uint32_t)},   // constant_id 0 -> NX
+        {1, sizeof(uint32_t), sizeof(uint32_t)}  // constant_id 1 -> NY
+    };
+    std::vector<uint8_t> bytes;
+    bytes.reserve(2 * sizeof(uint32_t));
+    AppendDataToBytesVec<uint32_t>(bytes, params.nx);
+    AppendDataToBytesVec<uint32_t>(bytes, params.ny);
+
+    vk::PushConstantRange push_range{};
+    push_range.setStageFlags(vk::ShaderStageFlagBits::eCompute)
+        .setOffset(0)
+        .setSize(sizeof(uint32_t));
+    vk::PipelineLayoutCreateInfo layout_ci{};
+    layout_ci.setSetLayoutCount(1)
+        .setPSetLayouts(&*cc_->descriptor_set_layout())
+        .setPushConstantRangeCount(1)
+        .setPPushConstantRanges(&push_range);
+    layout_compute_scalar_ = std::make_unique<vk::raii::PipelineLayout>(
+        dm_->device().createPipelineLayout(layout_ci));
+    pipeline_compute_scalar_ = dm_->CreateComputePipelineFromFile(
+        *layout_compute_scalar_, "shaders/compute_scalar.comp.spv", mes, bytes);
+}
+
+}  // namespace

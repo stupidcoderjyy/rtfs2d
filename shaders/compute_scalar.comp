@@ -7,12 +7,35 @@ layout(constant_id = 1) const uint NY = 128u;
 layout(std430, binding = 0) buffer UBuffer { float data[]; } u;
 layout(std430, binding = 1) buffer VBuffer { float data[]; } v;
 layout(std430, binding = 2) buffer ScalarBuffer { float data[]; } scalar;
-layout(std430, binding = 3) buffer PBuffer { float data[]; } p;
+layout(std430, binding = 3) buffer PressureBuffer { float data[]; } p;
+
+layout(push_constant) uniform Params { uint mode; } pc;
 
 void main() {
     uint idx = gl_GlobalInvocationID.x;
     if (idx >= NX * NY) return;
 
-    float speed = sqrt(u.data[idx] * u.data[idx] + v.data[idx] * v.data[idx]);
-    scalar.data[idx] = speed;
+    if (pc.mode == 0u) {
+        // 速度
+        float speed = sqrt(u.data[idx] * u.data[idx] + v.data[idx] * v.data[idx]);
+        scalar.data[idx] = speed;
+    } else if (pc.mode == 1u) {
+        // 压力
+        scalar.data[idx] = p.data[idx];
+    } else {
+        // 漩涡强度
+        uint i = idx % NX;
+        uint j = idx / NX;
+        if (i == 0u || i >= NX - 1u || j == 0u || j >= NY - 1u) {
+            scalar.data[idx] = 0.0;
+            return;
+        }
+        float inv2dx = 0.5 * float(NX);
+        float vl = v.data[idx - 1u];
+        float vr = v.data[idx + 1u];
+        float ub = u.data[idx - NX];
+        float ut = u.data[idx + NX];
+        float omega = (vr - vl - ut + ub) * inv2dx;
+        scalar.data[idx] = abs(omega);
+    }
 }
