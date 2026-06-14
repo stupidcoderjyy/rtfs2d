@@ -205,11 +205,11 @@ void SwapchainContext::CreateFrameBuffers() {
 }
 
 void SwapchainContext::CreateCommandBuffers() {
-    // 从命令池分配命令缓冲，数量与帧缓冲一致
+    // 从命令池分配命令缓冲，数量与帧缓冲对应，前两个用于计算命令，后两个用于渲染命令
     vk::CommandBufferAllocateInfo ai{};
     ai.setCommandPool(device_manager_->command_pool())
-        .setCommandBufferCount(kMaxFramesInFlight)             // 和“飞行帧”数量一致
-        .setLevel(vk::CommandBufferLevel::ePrimary);           // 主命令缓冲
+        .setCommandBufferCount(kMaxFramesInFlight * 2)
+        .setLevel(vk::CommandBufferLevel::ePrimary);
     command_buffers_ = device_manager_->device().allocateCommandBuffers(ai);
 }
 

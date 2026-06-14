@@ -20,7 +20,7 @@ class DeviceManager;
 class ComputeContext {
 public:
     explicit ComputeContext(DeviceManager& dm, const GridParams& params);
-    void RecordAndSubmit(const vk::raii::Queue& queue) const;
+    void RecordAndSubmit(const vk::raii::CommandBuffer& cb) const;
 
     enum DescriptorSetIndex {
         kSetAdvection,         // 平流
@@ -69,7 +69,7 @@ private:
     void CreateBuffers() const;
     void CreateDescriptorSets();
     void CreatePipelineLayout();
-    void RecordFluidStepCommands(const vk::raii::Queue& queue, const vk::raii::CommandBuffer& cb) const;
+    void RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) const;
     void InitializeVortexField() const; // 初始化流场为涡旋场
     void UploadObstacles(const ObstacleGeometry& geom);
 

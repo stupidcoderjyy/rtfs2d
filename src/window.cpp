@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "window.h"
-#include "vk_memory.h"
 
 namespace rtfs2d {
 
@@ -57,7 +56,6 @@ void Window::Show() {
                 }
                 continue;
             }
-            auto& cb = swapchain_ctx_->command_buffers()[current_frame_];
             auto& fence = swapchain_ctx_->in_flight_fence(current_frame_);
             auto& acquire_sem = swapchain_ctx_->image_available_semaphore(current_frame_);
 
@@ -71,7 +69,7 @@ void Window::Show() {
             device_manager_->device().resetFences(*fence);
 
             // 完成并验证着色器计算
-            compute_ctx_->RecordAndSubmit(device_manager_->graphics_queue());
+            compute_ctx_->RecordAndSubmit(swapchain_ctx_->command_buffers()[current_frame_]);
 
             // 尝试从交换链获取一张处于空闲状态图像的所有权
             // 一张图片可能有六个状态：空闲状态 → 被CPU占用 → 处于渲染队列 → 正在渲染 → 处于呈现队列 → 正在呈现
@@ -86,6 +84,7 @@ void Window::Show() {
                 continue;
             }
 
+            const auto& cb = swapchain_ctx_->command_buffers()[current_frame_ + 2];
             graphics_ctx_->RecordCommands(cb, img_idx);
 
             // 提交命令缓冲区。GPU会等待，直到图像就绪（acquire_sem被激活），CPU端会立刻返回，并准备下一帧的内容

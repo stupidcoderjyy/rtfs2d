@@ -32,23 +32,14 @@ ComputeContext::ComputeContext(DeviceManager& dm, const GridParams& params):
     AddDebugGeometry();
 }
 
-void ComputeContext::RecordAndSubmit(const vk::raii::Queue& queue) const {
-    vk::CommandBufferAllocateInfo ai{};
-    ai.setCommandPool(dm_->compute_command_pool())
-        .setCommandBufferCount(1)
-        .setLevel(vk::CommandBufferLevel::ePrimary);
-    auto cbs = dm_->device().allocateCommandBuffers(ai);
-    //TODO CommandBuffer不用每帧创建
-    auto& cb = cbs[0];
-    // 录制模拟任务
-    RecordFluidStepCommands(queue, cb);
-    // 提交与等待
+void ComputeContext::RecordAndSubmit(const vk::raii::CommandBuffer& cb) const {
+    cb.reset();
+    cb.begin({vk::CommandBufferUsageFlagBits::eSimultaneousUse});
+    RecordFluidStepCommands(cb);
+    cb.end();
     vk::SubmitInfo si{};
     si.setCommandBuffers(*cb);
-    queue.submit(si);
-    queue.waitIdle();
-
-    // std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    dm_->graphics_queue().submit(si);
 }
 
 void ComputeContext::AddBufferMemoryWriteReadBarrier(
@@ -229,9 +220,7 @@ void ComputeContext::CreatePipelineLayout() {
         dm_->device().createPipelineLayout(ci));
 }
 
-void ComputeContext::RecordFluidStepCommands(const vk::raii::Queue& queue, const vk::raii::CommandBuffer& cb) const {
-    cb.begin({vk::CommandBufferUsageFlagBits::eSimultaneousUse});
-
+void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) const {
     // u, v, markers → markers
     AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV0);
     AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV1);
@@ -306,7 +295,6 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::Queue& queue, const
     AddBufferMemoryWriteReadBarrier(cb, buffers::kBufV4);
     fluid_solvers_->SolveProjection(cb, DescriptorSetAt(kSetProjection));
     // [0(u), 1(v), 2(div), 3, 4(p)]
-    cb.end();
 }
 
 void ComputeContext::InitializeVortexField() const {

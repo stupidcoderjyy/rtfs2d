@@ -21,6 +21,7 @@ GraphicsContext::GraphicsContext(DeviceManager& dm, SwapchainContext& sc, Comput
 }
 
 void GraphicsContext::RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t img_idx) const {
+    cb.reset();
     cb.begin({});
 
     // 图像布局转换：从旧布局到颜色附件最优布局
