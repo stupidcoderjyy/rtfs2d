@@ -24,20 +24,22 @@ public:
 
     //TODO Buffer、DescriptorSet是整个程序共用的，应当分离成独立的模块
     enum DescriptorSetIndex {
-        kSetAdvection,         // 平流
-        kSetVorticity,         // 涡量约束
-        kSetDiffusionEven,     // 扩散 u 分量偶次迭代
-        kSetDiffusionOdd,      // 扩散 u 分量奇次迭代
-        kSetDivergence,        // 散度计算
-        kSetPressureEven,      // 压力求解偶次迭代
-        kSetPressureOdd,       // 压力求解奇次迭代
-        kSetProjection,        // 压力投影修正速度
+        kSetAdvection,              // 平流
+        kSetVorticity,              // 涡量约束
+        kSetDiffusionEven,          // 扩散 u 分量偶次迭代
+        kSetDiffusionOdd,           // 扩散 u 分量奇次迭代
+        kSetDivergence,             // 散度计算
+        kSetPressureEven,           // 压力求解偶次迭代
+        kSetPressureOdd,            // 压力求解奇次迭代
+        kSetProjection,             // 压力投影修正速度
         kSetIbmApplyForce,
         kSetIbmInterpolate,
         kSetIbmMask,
         kSetIbmSpreadMarkers,
-        kSetComputeScalar,     // 标量计算（用于可视化）
-        kSetVisualization      // 可视化
+        kSetSmoothVelocity,         // 平滑速度场（仅用于漩涡强度）
+        kSetComputeScalarVI,        // 漩涡强度计算
+        kSetComputeScalarOthers,    // 其他可视化标量计算
+        kSetVisualization           // 可视化
     };
 
     void EnsureBufferReady(
@@ -63,8 +65,7 @@ public:
     uint32_t ibm_marker_count() const { return ibm_marker_count_; }
 private:
     DeviceManager* dm_;
-    // v0, v1, v2, v3, v4, bc1, bc2, bc3, bc4, poly, marker, force, mask
-    static constexpr int kBindingsSize = 13;
+    // v0, v1, v2, v3, v4, v5, bc1, bc2, bc3, bc4, poly, marker, force, mask
     std::unique_ptr<vk::raii::DescriptorSetLayout> descriptor_set_layout_;
     std::unique_ptr<vk::raii::PipelineLayout> pipeline_layout_;
     std::unique_ptr<vk::raii::DescriptorPool> descriptor_pool_;
@@ -85,10 +86,10 @@ private:
 
     void DebugReadBackBuffer(const vk::raii::Buffer& buf, uint32_t size,
         const std::function<void(void* buf, uint32_t len)>& handler) const;
-    void DebugReadBackVelocityBuffer(const vk::raii::Queue& queue, const vk::raii::CommandBuffer& cb,
+    void DebugReadBackVelocityBuffer(const vk::raii::CommandBuffer& cb,
         int buffer, const std::string& log_prefix) const;
-    void DebugReadBackVelocityBufferPoints(const vk::raii::Queue& queue, const vk::raii::CommandBuffer& cb,
-        int buffer, const std::string& log_prefix, const std::vector<int>& indexes) const;
+    void DebugReadBackVelocityBufferPoints(const vk::raii::CommandBuffer &cb,
+        int buffer, const std::string &log_prefix, const std::vector<int> &indexes) const;
     void DebugReadBackBoundaryBuffer(int buffer) const;
     void AddDebugGeometry();
 };

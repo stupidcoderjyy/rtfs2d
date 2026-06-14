@@ -96,11 +96,14 @@ void GraphicsContext::CreateGraphicsPipeline() {
     const auto& params = cc_->grid_params();
     std::vector<vk::SpecializationMapEntry> mes = {
         {0, 0, sizeof(uint32_t)},   // constant_id 0 -> NX
-        {1, sizeof(uint32_t), sizeof(uint32_t)}  // constant_id 1 -> NY
+        {1, sizeof(uint32_t), sizeof(uint32_t)},  // constant_id 1 -> NY
+        {2, sizeof(uint32_t) * 2, sizeof(uint32_t)}  // constant_id 2 -> GRADIENT
     };
-    std::vector<uint8_t> bytes(2 * sizeof(uint32_t));
-    memcpy(bytes.data(), &params.nx, sizeof(uint32_t));
-    memcpy(bytes.data() + sizeof(uint32_t), &params.ny, sizeof(uint32_t));
+    std::vector<uint8_t> bytes;
+    bytes.reserve(3 * sizeof(uint32_t));
+    AppendDataToBytesVec<uint32_t>(bytes, params.nx);
+    AppendDataToBytesVec<uint32_t>(bytes, params.ny);
+    AppendDataToBytesVec<uint32_t>(bytes, 1);
 
     vk::SpecializationInfo specInfo{};
     specInfo.setMapEntries(mes)

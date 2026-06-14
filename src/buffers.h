@@ -12,16 +12,17 @@ constexpr int kBufV1 = 1;
 constexpr int kBufV2 = 2;
 constexpr int kBufV3 = 3;
 constexpr int kBufV4 = 4;
+constexpr int kBufV5 = 5;
 
-constexpr int kBufBc0 = 5;  //Left
-constexpr int kBufBc1 = 6;  //Right
-constexpr int kBufBc2 = 7;  //Bottom
-constexpr int kBufBc3 = 8;  //Top
+constexpr int kBufBc0 = 6;  //Left
+constexpr int kBufBc1 = 7;  //Right
+constexpr int kBufBc2 = 8;  //Bottom
+constexpr int kBufBc3 = 9;  //Top
 
-constexpr int kBufIbmPolygon = 9;
-constexpr int kBufIbmMarker = 10;
-constexpr int kBufIbmForce = 11;
-constexpr int kBufIbmMask = 12;
+constexpr int kBufIbmPolygon = 10;
+constexpr int kBufIbmMarker = 11;
+constexpr int kBufIbmForce = 12;
+constexpr int kBufIbmMask = 13;
 
 }
 

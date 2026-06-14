@@ -40,6 +40,7 @@ void ComputeContext::RecordAndSubmit(const vk::raii::CommandBuffer& cb) const {
     vk::SubmitInfo si{};
     si.setCommandBuffers(*cb);
     dm_->graphics_queue().submit(si);
+    // std::this_thread::sleep_for(std::chrono::milliseconds(100));
 }
 
 void ComputeContext::EnsureBufferReady(
@@ -64,7 +65,7 @@ void ComputeContext::CreateBuffers() const {
         | vk::BufferUsageFlagBits::eTransferSrc
         | vk::BufferUsageFlagBits::eTransferDst;
     auto mem_flags = vk::MemoryPropertyFlagBits::eDeviceLocal;
-    for (int i = buffers::kBufV0; i <= buffers::kBufV4; ++i) {
+    for (int i = buffers::kBufV0; i <= buffers::kBufV5; ++i) {
         dm_->CreateBuffer(i, compute_buf_size_, usage, mem_flags);
         dm_->InitBuffer(i, host_data);
     }
@@ -190,13 +191,26 @@ void ComputeContext::CreateDescriptorSets() {
         }, {kSetIbmSpreadMarkers,
             10, buffers::kBufIbmMarker,
             11, buffers::kBufIbmForce,
-        }, {kSetComputeScalar,
+        }, {kSetSmoothVelocity,
             0, buffers::kBufV0 /* u_src */,
             1, buffers::kBufV1 /* v_src */,
-            2, buffers::kBufV3 /* scalar*/,
-            3, buffers::kBufV4 /*   p   */,
+            3, buffers::kBufV3 /* u_sm  */,
+            4, buffers::kBufV5 /* v_sm  */,
+            12, buffers::kBufIbmMask,
+        }, {kSetComputeScalarVI,
+            0, buffers::kBufV3 /* u_sm  */,
+            1, buffers::kBufV5 /* v_sm  */,
+            2, buffers::kBufV2 /* scalar*/,
+            3, buffers::kBufV3 /*   p   */, //占位
+            12, buffers::kBufIbmMask,
+        }, {kSetComputeScalarOthers,
+            0, buffers::kBufV0 /* u_src */,
+            1, buffers::kBufV1 /* v_src */,
+            2, buffers::kBufV2 /* scalar*/,
+            3, buffers::kBufV3 /*   p   */,
+            12, buffers::kBufIbmMask,
         }, {kSetVisualization,
-            2, buffers::kBufV3 /* scalar*/,
+            2, buffers::kBufV2 /* scalar*/,
             12, buffers::kBufIbmMask,
         }
     };
@@ -300,13 +314,30 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) 
     fluid_solvers_->SolveProjection(cb, DescriptorSetAt(kSetProjection));
     // [0(u), 1(v), 2(div), 3, 4(p)]
 
+    int mode = 2;
+    if (mode == 2) {
+        // 平滑速度场以消除涡量可视化中的锯齿
+        // u_src, v_src → u_dst, v_dst
+        // [0(u_src), 1(v_src), 2(scalar), 3(u_sm), 4, 5(v_sm)]
+        EnsureBufferReadyForCompute(cb, buffers::kBufV0);
+        EnsureBufferReadyForCompute(cb, buffers::kBufV1);
+        fluid_solvers_->SmoothVelocity(cb, DescriptorSetAt(kSetSmoothVelocity));
+    }
+
     // 计算用于可视化的标量场 u, v, p → scalar
-    // [0(u), 1(v), 2, 3(scalar), 4(p)]
-    EnsureBufferReadyForCompute(cb, buffers::kBufV0);
-    EnsureBufferReadyForCompute(cb, buffers::kBufV1);
-    fluid_solvers_->ComputeScalar(cb, DescriptorSetAt(kSetComputeScalar), 0);
+    if (mode == 2) {
+        // [0, 1, 2(scalar), 3(u_sm), 4, 5(v_sm)]
+        EnsureBufferReadyForCompute(cb, buffers::kBufV3);
+        EnsureBufferReadyForCompute(cb, buffers::kBufV5);
+        fluid_solvers_->ComputeScalar(cb, DescriptorSetAt(kSetComputeScalarVI), mode);
+    } else {
+        // [0(u), 1(v), 2(scalar), 3, 4(p)]
+        EnsureBufferReadyForCompute(cb, buffers::kBufV0);
+        EnsureBufferReadyForCompute(cb, buffers::kBufV1);
+        fluid_solvers_->ComputeScalar(cb, DescriptorSetAt(kSetComputeScalarOthers), mode);
+    }
     EnsureBufferReady(vk::PipelineStageFlagBits::eComputeShader,
-        vk::PipelineStageFlagBits::eFragmentShader, cb, buffers::kBufV3);
+        vk::PipelineStageFlagBits::eFragmentShader, cb, buffers::kBufV2);
 }
 
 void ComputeContext::InitializeVortexField() const {
@@ -381,7 +412,6 @@ void ComputeContext::DebugReadBackBuffer(const vk::raii::Buffer &buf,
 }
 
 void ComputeContext::DebugReadBackVelocityBuffer(
-        const vk::raii::Queue& queue,
         const vk::raii::CommandBuffer& cb,
         int buffer,
         const std::string& log_prefix) const {
@@ -390,6 +420,7 @@ void ComputeContext::DebugReadBackVelocityBuffer(
     cb.end();
     vk::SubmitInfo si1{};
     si1.setCommandBuffers(*cb);
+    auto& queue = dm_->graphics_queue();
     queue.submit(si1);
     queue.waitIdle();
 
@@ -411,15 +442,15 @@ void ComputeContext::DebugReadBackVelocityBuffer(
     cb.begin({vk::CommandBufferUsageFlagBits::eSimultaneousUse});
 }
 
-void ComputeContext::DebugReadBackVelocityBufferPoints(const vk::raii::Queue &queue,
+void ComputeContext::DebugReadBackVelocityBufferPoints(
         const vk::raii::CommandBuffer &cb, int buffer,
         const std::string &log_prefix, const std::vector<int> &indexes) const {
-
     // 提交并等待
     EnsureBufferReadyForCompute(cb, buffer);
     cb.end();
     vk::SubmitInfo si1{};
     si1.setCommandBuffers(*cb);
+    auto& queue = dm_->graphics_queue();
     queue.submit(si1);
     queue.waitIdle();
 

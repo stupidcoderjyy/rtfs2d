@@ -20,6 +20,7 @@ FluidSolvers::FluidSolvers(DeviceManager &dm, ComputeContext &cc): dm_(&dm), cc_
     pipeline_ibm_apply_force_ = CreateSolverPipeline("shaders/ibm_apply_force.comp.spv");
     pipeline_ibm_mask_ = CreateSolverPipeline("shaders/ibm_mask.comp.spv");
     CreateComputeScalarPipeline();
+    pipeline_smooth_velocity_ = CreateSolverPipeline("shaders/smooth_velocity.comp.spv");
 }
 
 void FluidSolvers::SolveAdvection(
@@ -120,6 +121,14 @@ void FluidSolvers::ComputeScalar(const vk::raii::CommandBuffer &cb,
         0, *ds, nullptr);
     cb.pushConstants<uint32_t>(**layout_compute_scalar_, vk::ShaderStageFlagBits::eCompute,
         0, {mode});
+    uint32_t group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
+    cb.dispatch(group_count, 1, 1);
+}
+
+void FluidSolvers::SmoothVelocity(const vk::raii::CommandBuffer &cb, const vk::raii::DescriptorSet &ds) const {
+    cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_smooth_velocity_);
+    cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *cc_->pipeline_layout(),
+        0, *ds, nullptr);
     uint32_t group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
     cb.dispatch(group_count, 1, 1);
 }

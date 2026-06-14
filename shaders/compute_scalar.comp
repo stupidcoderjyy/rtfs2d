@@ -8,34 +8,68 @@ layout(std430, binding = 0) buffer UBuffer { float data[]; } u;
 layout(std430, binding = 1) buffer VBuffer { float data[]; } v;
 layout(std430, binding = 2) buffer ScalarBuffer { float data[]; } scalar;
 layout(std430, binding = 3) buffer PressureBuffer { float data[]; } p;
+layout(std430, binding = 12) buffer MaskBuf { float data[]; } mask;
 
 layout(push_constant) uniform Params { uint mode; } pc;
+
+bool isObstacle(uint ci, uint cj) {
+    if (ci >= NX || cj >= NY) return false;
+    return mask.data[(ci + cj * NX) * 2u] > 0.5;
+}
+
+float sampleSmooth(int ci, int cj, bool isU) {
+    if (ci < 0 || ci >= int(NX) || cj < 0 || cj >= int(NY)) return 0.0;
+    if (isObstacle(uint(ci), uint(cj))) return 0.0;
+
+    float sum = 0.0;
+    uint count = 0u;
+    const int w = 2;
+    for (int dj = -w; dj <= w; ++dj) {
+        for (int di = -w; di <= w; ++di) {
+            int ni = ci + di;
+            int nj = cj + dj;
+            if (ni < 0 || ni >= int(NX) || nj < 0 || nj >= int(NY)) continue;
+            if (isObstacle(uint(ni), uint(nj))) continue;
+            uint nidx = uint(ni) + uint(nj) * NX;
+            sum +=isU ? u.data[nidx] : v.data[nidx];
+            count++;
+        }
+    }
+    return sum / float(count);
+}
+
+float dvdxSmooth(int ci, int cj, float dx_inv) {
+    float vl = sampleSmooth(ci - 1, cj, false);
+    float vr = sampleSmooth(ci + 1, cj, false);
+    return (vr - vl) * 0.5 * dx_inv;
+}
+
+float dudySmooth(int ci, int cj, float dx_inv) {
+    float ub = sampleSmooth(ci, cj - 1, true);
+    float ut = sampleSmooth(ci, cj + 1, true);
+    return (ut - ub) * 0.5 * dx_inv;
+}
+
+float computeVorticity(uint idx, uint i, uint j) {
+    if (isObstacle(i, j)) return 0.0;
+    if (i < 1u || i >= NX - 1u || j < 1u || j >= NY - 1u) return 0.0;
+
+    float dx_inv = float(NX);
+    return dvdxSmooth(int(i), int(j), dx_inv) - dudySmooth(int(i), int(j), dx_inv);
+}
 
 void main() {
     uint idx = gl_GlobalInvocationID.x;
     if (idx >= NX * NY) return;
 
     if (pc.mode == 0u) {
-        // 速度
         float speed = sqrt(u.data[idx] * u.data[idx] + v.data[idx] * v.data[idx]);
         scalar.data[idx] = speed;
     } else if (pc.mode == 1u) {
-        // 压力
-        scalar.data[idx] = p.data[idx];
+        scalar.data[idx] = p.data[idx] * 100;
     } else {
-        // 漩涡强度
         uint i = idx % NX;
         uint j = idx / NX;
-        if (i == 0u || i >= NX - 1u || j == 0u || j >= NY - 1u) {
-            scalar.data[idx] = 0.0;
-            return;
-        }
-        float inv2dx = 0.5 * float(NX);
-        float vl = v.data[idx - 1u];
-        float vr = v.data[idx + 1u];
-        float ub = u.data[idx - NX];
-        float ut = u.data[idx + NX];
-        float omega = (vr - vl - ut + ub) * inv2dx;
-        scalar.data[idx] = abs(omega);
+        scalar.data[idx] = abs(computeVorticity(idx, i, j)) * 0.07;
     }
 }

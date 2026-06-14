@@ -32,6 +32,7 @@ public:
     void PrecomputeIBMMask(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
     void ComputeScalar(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet &ds,
         uint32_t mode) const;
+    void SmoothVelocity(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
 private:
     static constexpr int kWorkGroupSize = 128;
     DeviceManager* dm_;
@@ -51,6 +52,7 @@ private:
     std::unique_ptr<vk::raii::Pipeline> pipeline_ibm_mask_;
     std::unique_ptr<vk::raii::Pipeline> pipeline_compute_scalar_;
     std::unique_ptr<vk::raii::PipelineLayout> layout_compute_scalar_;
+    std::unique_ptr<vk::raii::Pipeline> pipeline_smooth_velocity_;
 
     std::unique_ptr<vk::raii::Pipeline> CreateSolverPipeline(const std::string& shader) const;
     void CreateJacobiPipelines();

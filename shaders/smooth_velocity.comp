@@ -1,0 +1,50 @@
+#version 450
+
+layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+layout(constant_id = 0) const uint NX = 128u;
+layout(constant_id = 1) const uint NY = 128u;
+
+layout(std430, binding = 0)  buffer USrc   { float data[]; } u_src;
+layout(std430, binding = 1)  buffer VSrc   { float data[]; } v_src;
+layout(std430, binding = 3)  buffer UDst   { float data[]; } u_sm;
+layout(std430, binding = 4)  buffer VDst   { float data[]; } v_sm;
+layout(std430, binding = 12) buffer MaskBuf { float data[]; } mask;
+
+bool isObstacle(uint ci, uint cj) {
+    if (ci >= NX || cj >= NY) return false;
+    return mask.data[(ci + cj * NX) * 2u] > 0.5;
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= NX * NY) return;
+
+    uint i = idx % NX;
+    uint j = idx / NX;
+
+    if (isObstacle(i, j)) {
+        u_sm.data[idx] = 0.0;
+        v_sm.data[idx] = 0.0;
+        return;
+    }
+
+    float usum = 0.0, vsum = 0.0;
+    uint count = 0;
+    const int w = 3;
+    for (int dj = -w; dj <= w; ++dj) {
+        for (int di = -w; di <= w; ++di) {
+            int ni = int(i) + di;
+            int nj = int(j) + dj;
+            if (ni < 0 || ni >= int(NX) || nj < 0 || nj >= int(NY)) continue;
+            if (isObstacle(uint(ni), uint(nj))) continue;
+            uint nidx = uint(ni) + uint(nj) * NX;
+            usum += u_src.data[nidx];
+            vsum += v_src.data[nidx];
+            count++;
+        }
+    }
+
+    float inv = 1.0 / count;
+    u_sm.data[idx] = usum * inv;
+    v_sm.data[idx] = vsum * inv;
+}
