@@ -28,6 +28,9 @@ private:
     std::unique_ptr<GraphicsContext> graphics_ctx_;
     bool debug_enabled_;
     size_t current_frame_ = 0;
+
+    static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
+    static void CursorPosCallback(GLFWwindow* window, double xpos, double ypos);
 };
 
 }

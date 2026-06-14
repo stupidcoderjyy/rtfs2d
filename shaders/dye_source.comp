@@ -1,0 +1,32 @@
+#version 450
+
+layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
+layout(constant_id = 0) const uint NX = 128u;
+layout(constant_id = 1) const uint NY = 128u;
+
+layout(std430, binding = 12) buffer MaskBuf { float data[]; } mask;
+layout(std430, binding = 13) buffer DyeBuf  { float data[]; } dye;
+
+layout(push_constant) uniform Params { float srcX; float srcY; } pc;
+
+bool isObstacle(uint ci, uint cj) {
+    if (ci >= NX || cj >= NY) return false;
+    return mask.data[(ci + cj * NX) * 2u] > 0.5;
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= NX * NY) return;
+
+    uint i = idx % NX;
+    uint j = idx / NX;
+    if (isObstacle(i, j)) return;
+
+    float x = float(i) / float(NX);
+    float y = float(j) / float(NY);
+    float dist = length(vec2(x - pc.srcX, y - pc.srcY));
+    float ink = max(0.0, 1.0 - dist / 0.03);
+    if (ink > 0.0) {
+        dye.data[idx] = max(dye.data[idx], ink);
+    }
+}

@@ -3,10 +3,11 @@
 layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 layout(constant_id = 0) const uint NX = 128u;
 layout(constant_id = 1) const uint NY = 128u;
-const float DT = 0.016;
+const float DT = 0.016f;
 
 layout(std430, binding = 0)  buffer USrc    { float data[]; } u;
 layout(std430, binding = 1)  buffer VSrc    { float data[]; } v;
+layout(std430, binding = 12) buffer MaskBuf { float data[]; } mask;
 layout(std430, binding = 13) buffer DyeSrc  { float data[]; } dye_src;
 layout(std430, binding = 14) buffer DyeDst  { float data[]; } dye_dst;
 
@@ -14,6 +15,11 @@ layout(std430, binding = 5) buffer LeftB   { uint data[]; } left;
 layout(std430, binding = 6) buffer RightB  { uint data[]; } right;
 layout(std430, binding = 7) buffer BottomB { uint data[]; } bottom;
 layout(std430, binding = 8) buffer TopB    { uint data[]; } top;
+
+bool isObstacle(uint ci, uint cj) {
+    if (ci >= NX || cj >= NY) return false;
+    return mask.data[(ci + cj * NX) * 2u] > 0.5;
+}
 
 float border_velocity(float vi, bool is_u, int edge, uint local) {
     uint bi = local * 3u;
@@ -63,10 +69,10 @@ float getU(int i, int j) {
     int cj = clamp(j, 0, int(NY) - 1);
     float vi = u.data[uint(ci) + uint(cj) * NX];
     int edge; uint local;
-    if (i < 0)          { edge = 0; local = uint(cj); }
+    if (i < 0)             { edge = 0; local = uint(cj); }
     else if (i >= int(NX)) { edge = 1; local = uint(cj); }
-    else if (j < 0)     { edge = 2; local = uint(ci); }
-    else                { edge = 3; local = uint(ci); }
+    else if (j < 0)        { edge = 2; local = uint(ci); }
+    else                   { edge = 3; local = uint(ci); }
     return border_velocity(vi, true, edge, local);
 }
 
@@ -77,22 +83,32 @@ float getV(int i, int j) {
     int cj = clamp(j, 0, int(NY) - 1);
     float vi = v.data[uint(ci) + uint(cj) * NX];
     int edge; uint local;
-    if (i < 0)          { edge = 0; local = uint(cj); }
+    if (i < 0)             { edge = 0; local = uint(cj); }
     else if (i >= int(NX)) { edge = 1; local = uint(cj); }
-    else if (j < 0)     { edge = 2; local = uint(ci); }
-    else                { edge = 3; local = uint(ci); }
+    else if (j < 0)        { edge = 2; local = uint(ci); }
+    else                   { edge = 3; local = uint(ci); }
     return border_velocity(vi, false, edge, local);
 }
 
 float sampleBilinearDye(float x, float y) {
-    x = clamp(x, 0.0, float(NX) - 1.0);
-    y = clamp(y, 0.0, float(NY) - 1.0);
+    if (x < 0.0 || x > float(NX) - 1.0 || y < 0.0 || y > float(NY) - 1.0)
+        return 0.0;
+
     uint ix0 = uint(floor(x)), ix1 = min(ix0 + 1u, NX - 1u);
     uint iy0 = uint(floor(y)), iy1 = min(iy0 + 1u, NY - 1u);
+
+    bool o00 = isObstacle(ix0, iy0), o10 = isObstacle(ix1, iy0);
+    bool o01 = isObstacle(ix0, iy1), o11 = isObstacle(ix1, iy1);
+
+    if (o00 || o01 || o10 || o11) {
+        return 0.0f;
+    }
+
     float v00 = dye_src.data[ix0 + iy0 * NX];
     float v10 = dye_src.data[ix1 + iy0 * NX];
     float v01 = dye_src.data[ix0 + iy1 * NX];
     float v11 = dye_src.data[ix1 + iy1 * NX];
+
     float tx = x - float(ix0), ty = y - float(iy0);
     return mix(mix(v00, v10, tx), mix(v01, v11, tx), ty);
 }
@@ -101,9 +117,15 @@ void main() {
     uint idx = gl_GlobalInvocationID.x;
     if (idx >= NX * NY) return;
 
-    float dx = 1.0 / float(NX);
     uint i = idx % NX;
     uint j = idx / NX;
+
+    if (isObstacle(i, j)) {
+        dye_dst.data[idx] = 0.0;
+        return;
+    }
+
+    float dx = 1.0 / float(NX);
 
     float vel_u = getU(int(i), int(j));
     float vel_v = getV(int(i), int(j));

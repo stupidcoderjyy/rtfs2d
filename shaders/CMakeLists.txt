@@ -16,6 +16,7 @@ set(SHADER_SOURCES
         compute_scalar.comp
         smooth_velocity.comp
         dye_advection.comp
+        dye_source.comp
 )
 
 find_program(GLSLC glslc HINTS "${LIB_PREFIX_PATH}/bin")

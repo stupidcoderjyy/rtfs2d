@@ -22,6 +22,7 @@ FluidSolvers::FluidSolvers(DeviceManager &dm, ComputeContext &cc): dm_(&dm), cc_
     CreateComputeScalarPipeline();
     pipeline_smooth_velocity_ = CreateSolverPipeline("shaders/smooth_velocity.comp.spv");
     pipeline_dye_advection_ = CreateSolverPipeline("shaders/dye_advection.comp.spv");
+    CreateDyeSourcePipeline();
 }
 
 void FluidSolvers::SolveAdvection(
@@ -142,6 +143,17 @@ void FluidSolvers::SolveDyeAdvection(const vk::raii::CommandBuffer &cb, const vk
     cb.dispatch(group_count, 1, 1);
 }
 
+void FluidSolvers::AddDyeSource(const vk::raii::CommandBuffer &cb, const vk::raii::DescriptorSet &ds,
+        float x, float y) const {
+    cb.bindPipeline(vk::PipelineBindPoint::eCompute, **pipeline_dye_source_);
+    cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *layout_dye_source_,
+        0, *ds, nullptr);
+    cb.pushConstants<float>(**layout_dye_source_, vk::ShaderStageFlagBits::eCompute,
+        0, {x, y});
+    uint32_t group_count = (cc_->cell_count() + kWorkGroupSize - 1) / kWorkGroupSize;
+    cb.dispatch(group_count, 1, 1);
+}
+
 std::unique_ptr<vk::raii::Pipeline> FluidSolvers::CreateSolverPipeline(const std::string &shader) const {
     const auto& params = cc_->grid_params();
     std::vector<vk::SpecializationMapEntry> mes = {
@@ -237,4 +249,29 @@ void FluidSolvers::CreateComputeScalarPipeline() {
         *layout_compute_scalar_, "shaders/compute_scalar.comp.spv", mes, bytes);
 }
 
+void FluidSolvers::CreateDyeSourcePipeline() {
+    const auto& params = cc_->grid_params();
+    std::vector<vk::SpecializationMapEntry> mes = {
+        {0, 0, sizeof(uint32_t)},   // constant_id 0 -> NX
+        {1, sizeof(uint32_t), sizeof(uint32_t)}  // constant_id 1 -> NY
+    };
+    std::vector<uint8_t> bytes;
+    bytes.reserve(2 * sizeof(uint32_t));
+    AppendDataToBytesVec<uint32_t>(bytes, params.nx);
+    AppendDataToBytesVec<uint32_t>(bytes, params.ny);
+
+    vk::PushConstantRange push_range{};
+    push_range.setStageFlags(vk::ShaderStageFlagBits::eCompute)
+        .setOffset(0)
+        .setSize(sizeof(uint32_t) + sizeof(float) * 2);
+    vk::PipelineLayoutCreateInfo layout_ci{};
+    layout_ci.setSetLayoutCount(1)
+        .setPSetLayouts(&*cc_->descriptor_set_layout())
+        .setPushConstantRangeCount(1)
+        .setPPushConstantRanges(&push_range);
+    layout_dye_source_ = std::make_unique<vk::raii::PipelineLayout>(
+        dm_->device().createPipelineLayout(layout_ci));
+    pipeline_dye_source_ = dm_->CreateComputePipelineFromFile(
+        *layout_dye_source_, "shaders/dye_source.comp.spv", mes, bytes);
+}
 }  // namespace

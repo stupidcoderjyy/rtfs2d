@@ -34,6 +34,8 @@ public:
         uint32_t mode) const;
     void SmoothVelocity(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
     void SolveDyeAdvection(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
+    void AddDyeSource(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds,
+        float x, float y) const;
 private:
     static constexpr int kWorkGroupSize = 128;
     DeviceManager* dm_;
@@ -55,11 +57,14 @@ private:
     std::unique_ptr<vk::raii::PipelineLayout> layout_compute_scalar_;
     std::unique_ptr<vk::raii::Pipeline> pipeline_smooth_velocity_;
     std::unique_ptr<vk::raii::Pipeline> pipeline_dye_advection_;
+    std::unique_ptr<vk::raii::Pipeline> pipeline_dye_source_;
+    std::unique_ptr<vk::raii::PipelineLayout> layout_dye_source_;
 
     std::unique_ptr<vk::raii::Pipeline> CreateSolverPipeline(const std::string& shader) const;
     void CreateJacobiPipelines();
     void CreateVorticitySolverPipeline();
     void CreateComputeScalarPipeline();
+    void CreateDyeSourcePipeline();
 };
 
 }

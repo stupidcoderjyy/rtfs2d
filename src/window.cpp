@@ -32,6 +32,8 @@ void Window::Show() {
         graphics_ctx_ = std::make_unique<GraphicsContext>(*device_manager_, *swapchain_ctx_, *compute_ctx_);
 
         glfwSetWindowUserPointer(window_, this);
+        glfwSetMouseButtonCallback(window_, MouseButtonCallback);
+        glfwSetCursorPosCallback(window_, CursorPosCallback);
         glfwSetFramebufferSizeCallback(window_, [](GLFWwindow* win, int w, int h) {
             auto* rtfs_win = static_cast<Window*>(glfwGetWindowUserPointer(win));
             rtfs_win->swapchain_ctx_->set_needs_recreate(true);
@@ -86,7 +88,8 @@ void Window::Show() {
 
             const auto& cb = swapchain_ctx_->command_buffers()[current_frame_ + 2];
             graphics_ctx_->RecordCommands(cb, img_idx,
-                static_cast<uint32_t>(compute_ctx_->vis_gradient()), 0);
+                static_cast<uint32_t>(compute_ctx_->vis_gradient()),
+                static_cast<uint32_t>(compute_ctx_->vis_mode()));
 
             // 提交命令缓冲区。GPU会等待，直到图像就绪（acquire_sem被激活），CPU端会立刻返回，并准备下一帧的内容
             // 需要为每个飞行帧准备独立的acquire_sem
@@ -119,6 +122,24 @@ void Window::Show() {
         device_manager_->device().waitIdle();
         throw;
     }
+}
+
+void Window::MouseButtonCallback(GLFWwindow *window, int button, int action, int mods) {
+    auto* w = static_cast<Window*>(glfwGetWindowUserPointer(window));
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        if (action == GLFW_PRESS) {
+            w->compute_ctx_->SetDyeInjecting(true);
+        } else if (action == GLFW_RELEASE) {
+            w->compute_ctx_->SetDyeInjecting(false);
+        }
+    }
+}
+
+void Window::CursorPosCallback(GLFWwindow *window, double xpos, double ypos) {
+    auto* w = static_cast<Window*>(glfwGetWindowUserPointer(window));
+    float nx = static_cast<float>(xpos) / static_cast<float>(w->width_);
+    float ny = static_cast<float>(ypos) / static_cast<float>(w->height_); // 翻转 Y 轴
+    w->compute_ctx_->SetDyeInjectPos(nx, ny);
 }
 
 }  // namespace rtfs2d

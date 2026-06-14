@@ -11,14 +11,13 @@ layout(push_constant) uniform VisParams {
 
 layout(set = 0, binding = 2, std430) buffer ScalarBuffer { float s[]; };
 layout(set = 0, binding = 12, std430) buffer MaskBuf { float data[]; } mask;
+layout(set = 0, binding = 13, std430) buffer DyeBuffer { float d[]; };
 
-// 灰度映射
 vec3 GrayScale(float t) {
     t = clamp(t, 0.0, 1.0);
     return vec3(t);
 }
 
-// 五段分段 mix（蓝→青→绿→黄→红→暗红）
 vec3 Jet(float t) {
     t = clamp(t, 0.0, 1.0);
     if (t < 0.125) {
@@ -34,7 +33,6 @@ vec3 Jet(float t) {
     }
 }
 
-// 蓝→白→红发散渐变（三次幂权重 + 中央白色峰值
 vec3 CoolWarm(float t) {
     t = clamp(t, 0.0, 1.0);
     float blue = pow(1.0 - t, 3.0);
@@ -63,15 +61,23 @@ void main() {
         return;
     }
 
-    float scalar = clamp(s[midx], 0.0, 1.0);
-
-    vec3 color;
-    if (vis.gradientType == 0u) {
-        color = GrayScale(scalar);
-    } else if (vis.gradientType == 1u) {
-        color = Jet(scalar);
+    if (vis.visMode == 0u) {
+        float scalar = clamp(s[midx], 0.0, 1.0);
+        vec3 color;
+        if (vis.gradientType == 0u) {
+            color = GrayScale(scalar);
+        } else if (vis.gradientType == 1u) {
+            color = Jet(scalar);
+        } else {
+            color = CoolWarm(scalar);
+        }
+        outColor = vec4(color, 1.0);
     } else {
-        color = CoolWarm(scalar);
+        float dye_val = clamp(d[midx], 0.0, 1.0);
+        vec3 dye_color = mix(
+            vec3(0.01, 0.01, 0.01),
+            mix(vec3(0.05, 1.0, 1.0), vec3(0.2, 0.4, 0.6), dye_val),
+            dye_val);
+        outColor = vec4(dye_color, 1.0);
     }
-    outColor = vec4(color, 1.0);
 }

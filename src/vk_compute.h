@@ -20,11 +20,12 @@ class DeviceManager;
 //TODO 这个应当放入配置模块
 enum class VisField { kSpeed = 0, kPressure = 1, kVorticity = 2 };
 enum class VisGradient { kGray = 0, kJet = 1, kCoolWarm = 2 };
+enum class VisMode { kField = 0, kDye = 1 };
 
 class ComputeContext {
 public:
     explicit ComputeContext(DeviceManager& dm, const GridParams& params);
-    void RecordAndSubmit(const vk::raii::CommandBuffer& cb) const;
+    void RecordAndSubmit(const vk::raii::CommandBuffer& cb);
 
     //TODO Buffer、DescriptorSet是整个程序共用的，应当分离成独立的模块
     enum DescriptorSetIndex {
@@ -43,8 +44,12 @@ public:
         kSetSmoothVelocity,         // 平滑速度场（仅用于漩涡强度）
         kSetComputeScalarVI,        // 漩涡强度计算
         kSetComputeScalarOthers,    // 其他可视化标量计算
-        kSetDyeAdvection,           // 染料平流，用于实现染料可视化
-        kSetVisualization,          // 可视化
+        kSetDyeAdvection1,          // 染料平流，用于实现染料可视化
+        kSetDyeAdvection2,          // 染料平流 (翻转)
+        kSetDyeSource1,             // 添加染料
+        kSetDyeSource2,             // 添加染料 (翻转)
+        kSetVis1,                   // 可视化
+        kSetVis2,                   // 可视化 (翻转)
     };
 
     void EnsureBufferReady(
@@ -55,6 +60,19 @@ public:
     void EnsureBufferReadyForCompute(const vk::raii::CommandBuffer& cb, int buf) const {
         EnsureBufferReady(vk::PipelineStageFlagBits::eComputeShader,
             vk::PipelineStageFlagBits::eComputeShader, cb, buf);
+    }
+
+    DescriptorSetIndex GetVisDescriptorSetIndex() const {
+        return dye_use_set1_ ? kSetVis1 : kSetVis2;
+    }
+
+    void SetDyeInjectPos(float x, float y) {
+        dye_x_ = x;
+        dye_y_ = y;
+    }
+
+    void SetDyeInjecting(bool injecting) {
+        dye_injecting_ = injecting;
     }
 
     // getter
@@ -70,10 +88,12 @@ public:
     uint32_t ibm_marker_count() const { return ibm_marker_count_; }
     VisField vis_field() const { return vis_field_; }
     VisGradient vis_gradient() const { return vis_gradient_; }
+    VisMode vis_mode() const { return vis_mode_; }
 
     //setter
     void set_vis_field(VisField field) { vis_field_ = field; }
     void set_vis_gradient(VisGradient gradient) { vis_gradient_ = gradient; }
+    void set_vis_mode(VisMode mode) { vis_mode_ = mode; }
 private:
     DeviceManager* dm_;
     // v0, v1, v2, v3, v4, v5, bc1, bc2, bc3, bc4, poly, marker, force, mask
@@ -87,13 +107,19 @@ private:
     const vk::DeviceSize compute_buf_size_;
     std::unique_ptr<BoundaryContext> boundary_ctx_;
     uint32_t ibm_marker_count_{};
-    VisField vis_field_;
-    VisGradient vis_gradient_;
+    VisField vis_field_ = VisField::kVorticity;
+    VisGradient vis_gradient_ = VisGradient::kGray;
+    VisMode vis_mode_ = VisMode::kDye;
+    bool dye_use_set1_ = false;
+    // 是否正在注入染料
+    bool dye_injecting_ = false;
+    // 染料位置
+    float dye_x_{}, dye_y_{};
 
     void CreateBuffers() const;
     void CreateDescriptorSets();
     void CreatePipelineLayout();
-    void RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) const;
+    void RecordFluidStepCommands(const vk::raii::CommandBuffer& cb);
     void InitializeVortexField() const; // 初始化流场为涡旋场
     void UploadObstacles(const ObstacleGeometry& geom);
 

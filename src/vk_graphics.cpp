@@ -70,7 +70,7 @@ void GraphicsContext::RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t
     // 将存储缓冲绑定到图形管线
     cb.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
         **graphics_pipeline_layout_, 0,
-        *cc_->DescriptorSetAt(ComputeContext::kSetVisualization), nullptr);
+        *cc_->DescriptorSetAt(cc_->GetVisDescriptorSetIndex()), nullptr);
 
     cb.pushConstants<uint32_t>(**graphics_pipeline_layout_,
         vk::ShaderStageFlagBits::eFragment, 0, {gradient_type, vis_mode});

@@ -32,7 +32,7 @@ ComputeContext::ComputeContext(DeviceManager& dm, const GridParams& params):
     AddDebugGeometry();
 }
 
-void ComputeContext::RecordAndSubmit(const vk::raii::CommandBuffer& cb) const {
+void ComputeContext::RecordAndSubmit(const vk::raii::CommandBuffer& cb) {
     cb.reset();
     cb.begin({vk::CommandBufferUsageFlagBits::eSimultaneousUse});
     RecordFluidStepCommands(cb);
@@ -106,10 +106,14 @@ void ComputeContext::CreateDescriptorSets() {
     dsb.AddStorageBufferBinding(kSetIbmMask, flag_compute);
     dsb.AddStorageBufferBinding(kSetIbmSpreadMarkers, flag_compute);
     dsb.AddStorageBufferBinding(kSetSmoothVelocity, flag_compute | flag_frag);
-    dsb.AddStorageBufferBinding(kSetComputeScalarVI, flag_compute);
+    dsb.AddStorageBufferBinding(kSetComputeScalarVI, flag_compute | flag_frag);
     dsb.AddStorageBufferBinding(kSetComputeScalarOthers, flag_compute);
-    dsb.AddStorageBufferBinding(kSetDyeAdvection, flag_compute);
-    dsb.AddStorageBufferBinding(kSetVisualization, flag_frag);
+    dsb.AddStorageBufferBinding(kSetDyeAdvection1, flag_compute);
+    dsb.AddStorageBufferBinding(kSetDyeAdvection2, flag_compute);
+    dsb.AddStorageBufferBinding(kSetDyeSource1, flag_compute);
+    dsb.AddStorageBufferBinding(kSetDyeSource2, flag_compute);
+    dsb.AddStorageBufferBinding(kSetVis1, flag_frag);
+    dsb.AddStorageBufferBinding(kSetVis2, flag_frag);
 
     std::vector<std::vector<int>> field_reg{
         {kSetAdvection,
@@ -215,19 +219,41 @@ void ComputeContext::CreateDescriptorSets() {
             2, buffers::kBufV2,     // scala
             3, buffers::kBufV3,     // p
             12, buffers::kBufIbmMask,
-        }, {kSetDyeAdvection,
+        }, {kSetDyeAdvection1,
             0, buffers::kBufV2,     // u_src
             1, buffers::kBufV3,     // v_src
+            12, buffers::kBufIbmMask,
             13, buffers::kBufV5,    // dye_src
             14, buffers::kBufV6,    // dye_dst
             5, buffers::kBufBc0,
             6, buffers::kBufBc1,
             7, buffers::kBufBc2,
             8, buffers::kBufBc3,
-        }, {kSetVisualization,
+        }, {kSetDyeAdvection2,
+            0, buffers::kBufV2,     // u_src
+            1, buffers::kBufV3,     // v_src
+            12, buffers::kBufIbmMask,
+            13, buffers::kBufV6,    // dye_src
+            14, buffers::kBufV5,    // dye_dst
+            5, buffers::kBufBc0,
+            6, buffers::kBufBc1,
+            7, buffers::kBufBc2,
+            8, buffers::kBufBc3,
+        }, {kSetDyeSource1,
+            12, buffers::kBufIbmMask,
+            13, buffers::kBufV6     // dye_dst
+        } ,{kSetDyeSource2,
+            12, buffers::kBufIbmMask,
+            13, buffers::kBufV5     // dye_dst
+        } ,{kSetVis1,
             2, buffers::kBufV2,     // scalar
             12, buffers::kBufIbmMask,
-        }
+            13, buffers::kBufV6     // dye_dst
+        }, {kSetVis2,
+            2, buffers::kBufV2,     // scalar
+            12, buffers::kBufIbmMask,
+            13, buffers::kBufV5     // dye_dst
+        },
     };
     auto [ds_layout, ds_pool, ds_sets] = dsb.build(field_reg.size());
     descriptor_set_layout_ = std::move(ds_layout);
@@ -253,7 +279,7 @@ void ComputeContext::CreatePipelineLayout() {
         dm_->device().createPipelineLayout(ci));
 }
 
-void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) const {
+void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) {
     // u, v, markers → markers
     EnsureBufferReadyForCompute(cb, buffers::kBufV0);
     EnsureBufferReadyForCompute(cb, buffers::kBufV1);
@@ -272,11 +298,19 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) 
     EnsureBufferReadyForCompute(cb, buffers::kBufV1);
     fluid_solvers_->SolveAdvection(cb, DescriptorSetAt(kSetAdvection));
 
-    // 染料平流
-    // [0, 1, 2(u_src), 3(v_src), 4, 5(dye_src), 6(dye_dst)]
-    EnsureBufferReadyForCompute(cb, buffers::kBufV2);
-    EnsureBufferReadyForCompute(cb, buffers::kBufV3);
-    fluid_solvers_->SolveDyeAdvection(cb, DescriptorSetAt(kSetAdvection));
+    if (vis_mode_ == VisMode::kDye) {
+        auto set_dye_adv = dye_use_set1_ ? kSetDyeAdvection1 : kSetDyeAdvection2;
+        auto set_dye_src = dye_use_set1_ ? kSetDyeSource1 : kSetDyeSource2;
+        dye_use_set1_ = !dye_use_set1_;
+        // 染料平流
+        EnsureBufferReadyForCompute(cb, buffers::kBufV2);
+        EnsureBufferReadyForCompute(cb, buffers::kBufV3);
+        fluid_solvers_->SolveDyeAdvection(cb, DescriptorSetAt(set_dye_adv));
+        // 在 dye_dst 上添加染料
+        if (dye_injecting_) {
+            fluid_solvers_->AddDyeSource(cb, DescriptorSetAt(set_dye_src), dye_x_, dye_y_);
+        }
+    }
 
     // 涡量约束
     // [0, 1, 2(u), 3(v), 4]
@@ -333,27 +367,33 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) 
     fluid_solvers_->SolveProjection(cb, DescriptorSetAt(kSetProjection));
     // [0(u), 1(v), 2(div), 3, 4(p)]
 
-    if (vis_field_ == VisField::kVorticity) {
-        // 平滑速度场以消除涡量可视化中的锯齿
-        // u_src, v_src → u_dst, v_dst
-        // [0(u_src), 1(v_src), 2(scalar), 3(u_sm), 4, 5(v_sm)]
-        EnsureBufferReadyForCompute(cb, buffers::kBufV0);
-        EnsureBufferReadyForCompute(cb, buffers::kBufV1);
-        fluid_solvers_->SmoothVelocity(cb, DescriptorSetAt(kSetSmoothVelocity));
-        // [0, 1, 2(scalar), 3(u_sm), 4, 5(v_sm)]
-        EnsureBufferReadyForCompute(cb, buffers::kBufV3);
-        EnsureBufferReadyForCompute(cb, buffers::kBufV5);
-        fluid_solvers_->ComputeScalar(cb, DescriptorSetAt(kSetComputeScalarVI),
-            static_cast<uint32_t>(vis_field_));
+    if (vis_mode_ == VisMode::kDye) {
+        auto buf_dye_dst = dye_use_set1_ ? buffers::kBufV5 : buffers::kBufV6;
+        EnsureBufferReady(vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eFragmentShader, cb, buf_dye_dst);
     } else {
-        // [0(u), 1(v), 2(scalar), 3, 4(p)]
-        EnsureBufferReadyForCompute(cb, buffers::kBufV0);
-        EnsureBufferReadyForCompute(cb, buffers::kBufV1);
-        fluid_solvers_->ComputeScalar(cb, DescriptorSetAt(kSetComputeScalarOthers),
-            static_cast<uint32_t>(vis_field_));
+        if (vis_field_ == VisField::kVorticity) {
+            // 平滑速度场以消除涡量可视化中的锯齿
+            // u_src, v_src → u_dst, v_dst
+            // [0(u_src), 1(v_src), 2(scalar), 3(u_sm), 4, 5(v_sm)]
+            EnsureBufferReadyForCompute(cb, buffers::kBufV0);
+            EnsureBufferReadyForCompute(cb, buffers::kBufV1);
+            fluid_solvers_->SmoothVelocity(cb, DescriptorSetAt(kSetSmoothVelocity));
+            // [0, 1, 2(scalar), 3(u_sm), 4, 5(v_sm)]
+            EnsureBufferReadyForCompute(cb, buffers::kBufV3);
+            EnsureBufferReadyForCompute(cb, buffers::kBufV5);
+            fluid_solvers_->ComputeScalar(cb, DescriptorSetAt(kSetComputeScalarVI),
+                static_cast<uint32_t>(vis_field_));
+        } else {
+            // [0(u), 1(v), 2(scalar), 3, 4(p)]
+            EnsureBufferReadyForCompute(cb, buffers::kBufV0);
+            EnsureBufferReadyForCompute(cb, buffers::kBufV1);
+            fluid_solvers_->ComputeScalar(cb, DescriptorSetAt(kSetComputeScalarOthers),
+                static_cast<uint32_t>(vis_field_));
+        }
+        EnsureBufferReady(vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eFragmentShader, cb, buffers::kBufV2);
     }
-    EnsureBufferReady(vk::PipelineStageFlagBits::eComputeShader,
-        vk::PipelineStageFlagBits::eFragmentShader, cb, buffers::kBufV2);
 }
 
 void ComputeContext::InitializeVortexField() const {
