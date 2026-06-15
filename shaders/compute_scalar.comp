@@ -3,6 +3,8 @@
 layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 layout(constant_id = 0) const uint NX = 128u;
 layout(constant_id = 1) const uint NY = 128u;
+layout(constant_id = 2) const float INV_DX = 128.0;
+layout(constant_id = 3) const float INV_DY = 128.0;
 
 layout(std430, binding = 0) buffer UBuffer { float data[]; } u;
 layout(std430, binding = 1) buffer VBuffer { float data[]; } v;
@@ -54,8 +56,8 @@ float computeVorticity(uint idx, uint i, uint j) {
     if (isObstacle(i, j)) return 0.0;
     if (i < 1u || i >= NX - 1u || j < 1u || j >= NY - 1u) return 0.0;
 
-    float dx_inv = float(NX);
-    return dvdxSmooth(int(i), int(j), dx_inv) - dudySmooth(int(i), int(j), dx_inv);
+    float dx_inv = INV_DX; float dy_inv = INV_DY;
+    return dvdxSmooth(int(i), int(j), dx_inv) - dudySmooth(int(i), int(j), dy_inv);
 }
 
 void main() {

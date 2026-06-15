@@ -13,12 +13,17 @@
 
 namespace rtfs2d {
 
-Window::Window(int width, int height, std::string title, bool debug_enabled):
-        width_(width), height_(height), title_(std::move(title)), debug_enabled_(debug_enabled) {}
+Window::Window(std::string title, bool debug_enabled):
+        width_(), height_(), title_(std::move(title)), debug_enabled_(debug_enabled) {}
 
 void Window::Show() {
     try {
-        // Stage 1
+        // Stage 1 加载流场配置
+        GridParams params{2.0f, 1.0f, 1024, 512};
+        width_ = params.nx;
+        height_ = params.ny;
+
+        // Stage 2
         if (!glfwInit()) {
             throw std::runtime_error("Failed to initialize GLFW");
         }
@@ -29,9 +34,6 @@ void Window::Show() {
         window_ = glfwCreateWindow(width_, height_, title_.c_str(), nullptr, nullptr);
         device_manager_ = std::make_unique<DeviceManager>(window_, debug_enabled_);
         swapchain_ctx_ = std::make_unique<SwapchainContext>(*device_manager_, width_, height_);
-
-        // Stage 2 加载流场配置
-        GridParams params{512, 512};
         buffers::InitBuffers(*device_manager_, params);
         DescriptorSets descriptor_sets(*device_manager_);
         compute_ctx_ = std::make_unique<ComputeContext>(*device_manager_, descriptor_sets, params);

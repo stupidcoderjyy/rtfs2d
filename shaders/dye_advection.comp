@@ -3,6 +3,8 @@
 layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 layout(constant_id = 0) const uint NX = 128u;
 layout(constant_id = 1) const uint NY = 128u;
+layout(constant_id = 2) const float INV_DX = 128.0;
+layout(constant_id = 3) const float INV_DY = 128.0;
 const float DT = 0.016f;
 
 layout(std430, binding = 0)  buffer USrc    { float data[]; } u;
@@ -125,13 +127,12 @@ void main() {
         return;
     }
 
-    float dx = 1.0 / float(NX);
-
+    
     float vel_u = getU(int(i), int(j));
     float vel_v = getV(int(i), int(j));
 
-    float bx = float(i) + 0.5 - vel_u * DT / dx;
-    float by = float(j) + 0.5 - vel_v * DT / dx;
+    float bx = float(i) + 0.5 - vel_u * DT * INV_DX;
+    float by = float(j) + 0.5 - vel_v * DT * INV_DY;
     float sx = bx - 0.5;
     float sy = by - 0.5;
 

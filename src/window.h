@@ -16,7 +16,7 @@ namespace rtfs2d {
 
 class Window {
 public:
-    Window(int width, int height, std::string title, bool debug_enabled = true);
+    explicit Window(std::string title, bool debug_enabled = true);
     void Show();
 private:
     int width_, height_;

@@ -3,6 +3,8 @@
 layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 layout(constant_id = 0) const uint NX = 128u;
 layout(constant_id = 1) const uint NY = 128u;
+layout(constant_id = 2) const float INV_DX = 128.0;
+layout(constant_id = 3) const float INV_DY = 128.0;
 
 const float DT = 0.016f;
 
@@ -49,7 +51,7 @@ float border_pressure(float pi, int edge, int ci, int cj) {
             float un_i = (edge <= 1) ? u.data[i_idx] : v.data[i_idx];
             float ubc_n = (edge <= 1) ? bc_u : bc_v;
             float u_face = 0.5 * ((2.0 * ubc_n - un_i) + un_i);
-            float dx = 1.0f / float(NX);
+            float dx = 1.0 / INV_DX;
             return pi + (u_face - ubc_n) * (dx / DT);
         }
         case 3: // Pressure: Dirichlet p=0 -> ghost = -pi
@@ -84,7 +86,7 @@ void main() {
     uint idx = gl_GlobalInvocationID.x;
     if (idx >= NX * NY) return;
 
-    float inv_2dx = 0.5f * float(NX);
+    float inv_2dx = 0.5 * INV_DX; float inv_2dy = 0.5 * INV_DY;
     uint i = idx % NX;
     uint j = idx / NX;
 
@@ -94,5 +96,5 @@ void main() {
     float p_top    = getPressure(int(i), int(j)+1);
 
     u.data[idx] -= (p_right - p_left) * inv_2dx;
-    v.data[idx] -= (p_top - p_bottom) * inv_2dx;
+    v.data[idx] -= (p_top - p_bottom) * inv_2dy;
 }

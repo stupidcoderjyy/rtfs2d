@@ -3,6 +3,8 @@
 layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 layout(constant_id = 0) const uint NX = 128u;
 layout(constant_id = 1) const uint NY = 128u;
+layout(constant_id = 2) const float INV_DX = 128.0;
+layout(constant_id = 3) const float INV_DY = 128.0;
 
 layout(std430, binding = 0) buffer USrc { float data[]; } u;
 layout(std430, binding = 1) buffer VSrc { float data[]; } v;
@@ -105,7 +107,7 @@ void main() {
     uint idx = gl_GlobalInvocationID.x;
     if (idx >= NX * NY) return;
 
-    float inv_2dx = 0.5f * float(NX);
+    float inv_2dx = 0.5 * INV_DX; float inv_2dy = 0.5 * INV_DY;
     uint i = idx % NX;
     uint j = idx / NX;
 
@@ -114,5 +116,5 @@ void main() {
     float v_bottom = getV(int(i), int(j)-1);
     float v_top    = getV(int(i), int(j)+1);
 
-    div.data[idx] = (u_right - u_left + v_top - v_bottom) * inv_2dx;
+    div.data[idx] = (u_right - u_left) * inv_2dx + (v_top - v_bottom) * inv_2dy;
 }

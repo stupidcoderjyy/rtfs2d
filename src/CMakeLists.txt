@@ -2,7 +2,6 @@
 
 add_library(${TARGET} STATIC
         fluid_solvers.cpp
-        grid.cpp
         obstacle_geometry.cpp
         vk_boundary.cpp
         vk_compute.cpp

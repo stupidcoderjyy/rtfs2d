@@ -3,6 +3,8 @@
 layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 layout(constant_id = 0) const uint NX = 128u;
 layout(constant_id = 1) const uint NY = 128u;
+layout(constant_id = 2) const float INV_DX = 128.0;
+layout(constant_id = 3) const float INV_DY = 128.0;
 
 layout(std430, binding = 0) buffer UBuffer { float data[]; } u;
 layout(std430, binding = 1) buffer VBuffer { float data[]; } v;
@@ -106,8 +108,8 @@ void main() {
     uint idx = gl_GlobalInvocationID.x;
     if (idx >= NX * NY) return;
 
-    float dx = 1.0f / float(NX);
-    float inv_2dx = 0.5f * float(NX);
+    float dx = 1.0 / INV_DX;
+    float inv_2dx = 0.5 * INV_DX; float inv_2dy = 0.5 * INV_DY;
     uint i = idx % NX;
     uint j = idx / NX;
 
@@ -115,19 +117,19 @@ void main() {
     float v_right = getV(int(i)+1, int(j));
     float u_down  = getU(int(i), int(j)-1);
     float u_up    = getU(int(i), int(j)+1);
-    float omega = (v_right - v_left - u_up + u_down) * inv_2dx;
+    float omega = (v_right - v_left) * inv_2dx - (u_up - u_down) * inv_2dy;
 
     float wr = abs((getV(int(i)+2, int(j)) - getV(int(i), int(j))) * inv_2dx
-                 - (getU(int(i)+1, int(j)+1) - getU(int(i)+1, int(j)-1)) * inv_2dx);
+                 - (getU(int(i)+1, int(j)+1) - getU(int(i)+1, int(j)-1)) * inv_2dy);
     float wl = abs((getV(int(i), int(j)) - getV(int(i)-2, int(j))) * inv_2dx
-                 - (getU(int(i)-1, int(j)+1) - getU(int(i)-1, int(j)-1)) * inv_2dx);
+                 - (getU(int(i)-1, int(j)+1) - getU(int(i)-1, int(j)-1)) * inv_2dy);
     float wu = abs((getV(int(i)+1, int(j)+1) - getV(int(i)-1, int(j)+1)) * inv_2dx
-                 - (getU(int(i), int(j)+2) - getU(int(i), int(j))) * inv_2dx);
+                 - (getU(int(i), int(j)+2) - getU(int(i), int(j))) * inv_2dy);
     float wd = abs((getV(int(i)+1, int(j)-1) - getV(int(i)-1, int(j)-1)) * inv_2dx
-                 - (getU(int(i), int(j)) - getU(int(i), int(j)-2)) * inv_2dx);
+                 - (getU(int(i), int(j)) - getU(int(i), int(j)-2)) * inv_2dy);
 
     float grad_x = (wr - wl) * inv_2dx;
-    float grad_y = (wu - wd) * inv_2dx;
+    float grad_y = (wu - wd) * inv_2dy;
 
     float len = length(vec2(grad_x, grad_y));
     float nx = 0.0, ny = 0.0;
@@ -136,7 +138,7 @@ void main() {
     float fx = pc.epsilon * dx * ny * omega;
     float fy = -pc.epsilon * dx * nx * omega;
 
-    float f_max = 2.0 / dx;
+    float f_max = 2.0 * INV_DX;
     float fmag = length(vec2(fx, fy));
     if (fmag > f_max) { fx *= f_max / fmag; fy *= f_max / fmag; }
 
