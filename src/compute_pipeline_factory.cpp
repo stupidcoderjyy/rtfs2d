@@ -6,6 +6,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include "descriptor_sets.h"
 #include "vk_compute.h"
 #include "vk_device.h"
 
@@ -20,8 +21,8 @@ ComputeShaderTask::ComputeShaderTask(
 namespace internal {
 
 ComputeShaderTaskBuilder::ComputeShaderTaskBuilder(
-        DeviceManager* dm, ComputeContext* cc, std::string shader)
-        : dm_(dm), cc_(cc), shader_path_(std::move(shader)) {
+        DeviceManager* dm, ComputeContext* cc, DescriptorSets* ds, std::string shader)
+        : dm_(dm), cc_(cc), ds_(ds), shader_path_(std::move(shader)) {
 }
 
 ComputeShaderTaskBuilder& ComputeShaderTaskBuilder::SetPipelineLayout(const std::shared_ptr<vk::raii::PipelineLayout>& layout) {
@@ -59,6 +60,12 @@ std::unique_ptr<ComputeShaderTask> ComputeShaderTaskBuilder::Build() {
 
 void ComputeShaderTaskBuilder::CreatePipelineLayout() {
     if (push_const_size_ == 0) {
+        // 默认
+        vk::PipelineLayoutCreateInfo ci{};
+        ci.setSetLayoutCount(1)
+            .setPSetLayouts(&*ds_->descriptor_set_layout());
+        layout_ = std::make_shared<vk::raii::PipelineLayout>(
+            dm_->device().createPipelineLayout(ci));
         return;
     }
     vk::PipelineLayoutCreateInfo ci{};
@@ -67,19 +74,19 @@ void ComputeShaderTaskBuilder::CreatePipelineLayout() {
         .setOffset(0)
         .setSize(push_const_size_);
     ci.setSetLayoutCount(1)
-        .setPSetLayouts(&*cc_->descriptor_set_layout())
+        .setPSetLayouts(&*ds_->descriptor_set_layout())
         .setPushConstantRanges(pcr);
     layout_ = std::make_shared<vk::raii::PipelineLayout>(dm_->device().createPipelineLayout(ci));
 }
 
 }
 
-ComputeShaderTaskFactory::ComputeShaderTaskFactory(DeviceManager& dm, ComputeContext& cc):
-        dm_(&dm), cc_(&cc){
+ComputeShaderTaskFactory::ComputeShaderTaskFactory(DeviceManager& dm, ComputeContext& cc, DescriptorSets& ds):
+        dm_(&dm), cc_(&cc), ds_(&ds){
 }
 
 internal::ComputeShaderTaskBuilder ComputeShaderTaskFactory::Create(const std::string &shader_path) const {
-    internal::ComputeShaderTaskBuilder builder(dm_, cc_, shader_path);
+    internal::ComputeShaderTaskBuilder builder(dm_, cc_, ds_, shader_path);
     builder.SetPipelineLayout(cc_->pipeline_layout());
     return builder;
 }

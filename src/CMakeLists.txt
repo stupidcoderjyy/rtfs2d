@@ -14,6 +14,8 @@ add_library(${TARGET} STATIC
         vk_swapchain.cpp
         window.cpp
         compute_pipeline_factory.cpp
+        buffers.cpp
+        descriptor_sets.cpp
 )
 add_library(rtfs2d::core ALIAS ${TARGET})
 target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

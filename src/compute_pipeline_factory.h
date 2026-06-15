@@ -13,6 +13,7 @@ namespace rtfs2d {
 
 class DeviceManager;
 class ComputeContext;
+class DescriptorSets;
 
 class ComputeShaderTask {
     friend class ComputeShaderTaskBuilder;
@@ -47,7 +48,7 @@ namespace internal {
 class ComputeShaderTaskBuilder {
     friend class ComputeShaderTaskFactory;
 public:
-    explicit ComputeShaderTaskBuilder(DeviceManager* dm, ComputeContext* cc, std::string shader);
+    explicit ComputeShaderTaskBuilder(DeviceManager* dm, ComputeContext* cc, DescriptorSets* ds, std::string shader);
     template<typename T>
     ComputeShaderTaskBuilder& AppendSpecializationConst(const std::initializer_list<T>& spec) {
         for (const auto& val : spec) {
@@ -64,6 +65,7 @@ public:
 private:
     DeviceManager* dm_;
     ComputeContext* cc_;
+    DescriptorSets* ds_;
     std::string shader_path_;
     std::vector<uint8_t> spec_const_bytes_;
     uint32_t spec_const_size_ = 0;
@@ -77,12 +79,13 @@ private:
 
 class ComputeShaderTaskFactory {
 public:
-    ComputeShaderTaskFactory(DeviceManager& dm, ComputeContext& cc);
+    ComputeShaderTaskFactory(DeviceManager& dm, ComputeContext& cc, DescriptorSets& ds);
     internal::ComputeShaderTaskBuilder Create(const std::string& shader_path) const;
 
 private:
     DeviceManager* dm_;
     ComputeContext* cc_;
+    DescriptorSets* ds_;
 };
 
 }

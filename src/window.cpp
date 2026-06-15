@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "window.h"
+#include "descriptor_sets.h"
 
 namespace rtfs2d {
 
@@ -17,6 +18,7 @@ Window::Window(int width, int height, std::string title, bool debug_enabled):
 
 void Window::Show() {
     try {
+        // Stage 1
         if (!glfwInit()) {
             throw std::runtime_error("Failed to initialize GLFW");
         }
@@ -27,9 +29,14 @@ void Window::Show() {
         window_ = glfwCreateWindow(width_, height_, title_.c_str(), nullptr, nullptr);
         device_manager_ = std::make_unique<DeviceManager>(window_, debug_enabled_);
         swapchain_ctx_ = std::make_unique<SwapchainContext>(*device_manager_, width_, height_);
+
+        // Stage 2 加载流场配置
         GridParams params{512, 512};
-        compute_ctx_ = std::make_unique<ComputeContext>(*device_manager_, params);
-        graphics_ctx_ = std::make_unique<GraphicsContext>(*device_manager_, *swapchain_ctx_, *compute_ctx_);
+        buffers::InitBuffers(*device_manager_, params);
+        DescriptorSets descriptor_sets(*device_manager_);
+        compute_ctx_ = std::make_unique<ComputeContext>(*device_manager_, descriptor_sets, params);
+        graphics_ctx_ = std::make_unique<GraphicsContext>(*device_manager_, *swapchain_ctx_,
+            *compute_ctx_, descriptor_sets);
 
         glfwSetWindowUserPointer(window_, this);
         glfwSetMouseButtonCallback(window_, MouseButtonCallback);

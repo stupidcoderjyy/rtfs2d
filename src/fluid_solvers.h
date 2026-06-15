@@ -6,7 +6,6 @@
 #define RTFS2D_FLUID_SOLVERS_H
 
 #include <memory>
-#include <vulkan/vulkan_raii.hpp>
 
 #include "compute_pipeline_factory.h"
 
@@ -17,7 +16,7 @@ class ComputeContext;
 
 class FluidSolvers {
 public:
-    FluidSolvers(DeviceManager& dm, ComputeContext& cc);
+    FluidSolvers(DeviceManager& dm, ComputeContext& cc, DescriptorSets& ds);
 
     ComputeShaderTask& task_advection() const { return *task_advection_; }
     ComputeShaderTask& task_divergence() const { return *task_divergence_; }

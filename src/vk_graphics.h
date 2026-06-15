@@ -12,10 +12,11 @@ namespace rtfs2d {
 class DeviceManager;
 class SwapchainContext;
 class ComputeContext;
+class DescriptorSets;
 
 class GraphicsContext {
 public:
-    GraphicsContext(DeviceManager& dm, SwapchainContext& sc, ComputeContext& cc);
+    GraphicsContext(DeviceManager& dm, SwapchainContext& sc, ComputeContext& cc, DescriptorSets& ds);
     void RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t img_idx,
         uint32_t gradient_type, uint32_t vis_mode) const;
 
@@ -23,6 +24,7 @@ private:
     DeviceManager* dm_;
     SwapchainContext* sc_;
     ComputeContext* cc_;
+    DescriptorSets* ds_;
     std::unique_ptr<vk::raii::PipelineLayout> graphics_pipeline_layout_;
     std::unique_ptr<vk::raii::Pipeline> graphics_pipeline_;
 

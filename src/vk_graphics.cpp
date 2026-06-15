@@ -9,14 +9,15 @@
 #include <spdlog/spdlog.h>
 #include <vector>
 
+#include "descriptor_sets.h"
 #include "vk_device.h"
 #include "vk_swapchain.h"
 #include "vk_compute.h"
 
 namespace rtfs2d {
 
-GraphicsContext::GraphicsContext(DeviceManager& dm, SwapchainContext& sc, ComputeContext& cc) :
-        dm_(&dm), sc_(&sc), cc_(&cc) {
+GraphicsContext::GraphicsContext(DeviceManager& dm, SwapchainContext& sc, ComputeContext& cc, DescriptorSets& ds) :
+        dm_(&dm), sc_(&sc), cc_(&cc), ds_(&ds) {
     CreateGraphicsPipeline();
 }
 
@@ -70,7 +71,7 @@ void GraphicsContext::RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t
     // 将存储缓冲绑定到图形管线
     cb.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
         **graphics_pipeline_layout_, 0,
-        *cc_->DescriptorSetAt(cc_->GetVisDescriptorSetIndex()), nullptr);
+        *ds_->SetAt(cc_->GetVisDescriptorSetIndex()), nullptr);
 
     cb.pushConstants<uint32_t>(**graphics_pipeline_layout_,
         vk::ShaderStageFlagBits::eFragment, 0, {gradient_type, vis_mode});
@@ -171,7 +172,7 @@ void GraphicsContext::CreateGraphicsPipeline() {
     // 管线布局
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.setSetLayoutCount(1)
-        .setPSetLayouts(&*cc_->descriptor_set_layout())
+        .setPSetLayouts(&*ds_->descriptor_set_layout())
         .setPushConstantRanges(pcr);
 
     graphics_pipeline_layout_ = std::make_unique<vk::raii::PipelineLayout>(

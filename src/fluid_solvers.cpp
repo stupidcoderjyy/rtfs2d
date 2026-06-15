@@ -9,7 +9,7 @@
 
 namespace rtfs2d {
 
-FluidSolvers::FluidSolvers(DeviceManager &dm, ComputeContext &cc): factory_(dm, cc) {
+FluidSolvers::FluidSolvers(DeviceManager &dm, ComputeContext &cc, DescriptorSets& ds): factory_(dm, cc, ds) {
     auto& params = cc.grid_params();
     uint32_t nx = params.nx, ny = params.ny;
     task_advection_ = factory_.Create("shaders/advection.comp.spv")

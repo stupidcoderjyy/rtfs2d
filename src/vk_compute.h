@@ -8,6 +8,7 @@
 #include <functional>
 #include <vulkan/vulkan_raii.hpp>
 
+#include "descriptor_sets.h"
 #include "grid.h"
 #include "fluid_solvers.h"
 #include "vk_boundary.h"
@@ -24,33 +25,8 @@ enum class VisMode { kField = 0, kDye = 1 };
 
 class ComputeContext {
 public:
-    explicit ComputeContext(DeviceManager& dm, const GridParams& params);
+    explicit ComputeContext(DeviceManager& dm, DescriptorSets& ds, const GridParams& params);
     void RecordAndSubmit(const vk::raii::CommandBuffer& cb);
-
-    //TODO Buffer、DescriptorSet是整个程序共用的，应当分离成独立的模块
-    enum DescriptorSetIndex {
-        kSetAdvection,              // 平流
-        kSetVorticity,              // 涡量约束
-        kSetDiffusionEven,          // 扩散 u 分量偶次迭代
-        kSetDiffusionOdd,           // 扩散 u 分量奇次迭代
-        kSetDivergence,             // 散度计算
-        kSetPressureEven,           // 压力求解偶次迭代
-        kSetPressureOdd,            // 压力求解奇次迭代
-        kSetProjection,             // 压力投影修正速度
-        kSetIbmApplyForce,
-        kSetIbmInterpolate,
-        kSetIbmMask,
-        kSetIbmSpreadMarkers,
-        kSetSmoothVelocity,         // 平滑速度场（仅用于漩涡强度）
-        kSetComputeScalarVI,        // 漩涡强度计算
-        kSetComputeScalarOthers,    // 其他可视化标量计算
-        kSetDyeAdvection1,          // 染料平流，用于实现染料可视化
-        kSetDyeAdvection2,          // 染料平流 (翻转)
-        kSetDyeSource1,             // 添加染料
-        kSetDyeSource2,             // 添加染料 (翻转)
-        kSetVis1,                   // 可视化
-        kSetVis2,                   // 可视化 (翻转)
-    };
 
     void EnsureBufferReady(
         vk::PipelineStageFlagBits src_stage,
@@ -75,11 +51,6 @@ public:
         dye_injecting_ = injecting;
     }
 
-    // getter
-    const vk::raii::DescriptorSet& DescriptorSetAt(DescriptorSetIndex idx) const {
-        return *descriptor_sets_[idx];
-    }
-    const vk::raii::DescriptorSetLayout& descriptor_set_layout() const { return *descriptor_set_layout_; }
     const GridParams& grid_params() const { return grid_params_; }
     int cell_count() const { return cell_count_; }
     vk::DeviceSize buf_size() const { return compute_buf_size_; }
@@ -96,11 +67,9 @@ public:
     void set_vis_mode(VisMode mode) { vis_mode_ = mode; }
 private:
     DeviceManager* dm_;
+    DescriptorSets* ds_;
     // v0, v1, v2, v3, v4, v5, bc1, bc2, bc3, bc4, poly, marker, force, mask
-    std::unique_ptr<vk::raii::DescriptorSetLayout> descriptor_set_layout_;
     std::shared_ptr<vk::raii::PipelineLayout> pipeline_layout_;
-    std::unique_ptr<vk::raii::DescriptorPool> descriptor_pool_;
-    std::vector<std::unique_ptr<vk::raii::DescriptorSet>> descriptor_sets_;
     std::unique_ptr<FluidSolvers> fluid_solvers_;
     GridParams grid_params_;
     const int cell_count_;
@@ -116,9 +85,6 @@ private:
     // 染料位置
     float dye_x_{}, dye_y_{};
 
-    void CreateBuffers() const;
-    void CreateDescriptorSets();
-    void CreatePipelineLayout();
     void RecordFluidStepCommands(const vk::raii::CommandBuffer& cb);
     void InitializeVortexField() const; // 初始化流场为涡旋场
     void UploadObstacles(const ObstacleGeometry& geom);
