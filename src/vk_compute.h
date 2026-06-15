@@ -26,7 +26,7 @@ enum class VisMode { kField = 0, kDye = 1 };
 class ComputeContext {
 public:
     explicit ComputeContext(DeviceManager& dm, DescriptorSets& ds, const GridParams& params);
-    void RecordAndSubmit(const vk::raii::CommandBuffer& cb);
+    void RecordCommands(const vk::raii::CommandBuffer& cb);
 
     void EnsureBufferReady(
         vk::PipelineStageFlagBits src_stage,
@@ -85,7 +85,6 @@ private:
     // 染料位置
     float dye_x_{}, dye_y_{};
 
-    void RecordFluidStepCommands(const vk::raii::CommandBuffer& cb);
     void InitializeVortexField() const; // 初始化流场为涡旋场
     void UploadObstacles(const ObstacleGeometry& geom);
 

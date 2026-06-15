@@ -16,7 +16,6 @@ DeviceManager::DeviceManager(GLFWwindow *window, bool debug_enabled): debug_enab
     CheckPhysicalDevice();
     CreateLogicalDevice();
     CreateCommandPool();
-    CreateComputeCommandPool();
 }
 
 std::unique_ptr<vk::raii::ShaderModule> DeviceManager::LoadShader(const std::string& path) const {
@@ -303,14 +302,6 @@ void DeviceManager::CreateCommandPool() {
     ci.setQueueFamilyIndex(graphics_queue_family_index_)
         .setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer);
     command_pool_ = std::make_unique<vk::raii::CommandPool>(device_->createCommandPool(ci));
-}
-
-void DeviceManager::CreateComputeCommandPool() {
-    vk::CommandPoolCreateInfo cp_ci{};
-    cp_ci.setQueueFamilyIndex(graphics_queue_family_index_)
-        .setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer);
-    compute_command_pool_ = std::make_unique<vk::raii::CommandPool>(
-        device_->createCommandPool(cp_ci));
 }
 
 }  // namespace rtfs2d

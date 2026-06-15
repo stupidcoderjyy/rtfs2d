@@ -30,34 +30,7 @@ ComputeContext::ComputeContext(DeviceManager& dm, DescriptorSets& ds, const Grid
     AddDebugGeometry();
 }
 
-void ComputeContext::RecordAndSubmit(const vk::raii::CommandBuffer& cb) {
-    cb.reset();
-    cb.begin({vk::CommandBufferUsageFlagBits::eSimultaneousUse});
-    RecordFluidStepCommands(cb);
-    cb.end();
-    vk::SubmitInfo si{};
-    si.setCommandBuffers(*cb);
-    dm_->graphics_queue().submit(si);
-    // std::this_thread::sleep_for(std::chrono::milliseconds(100));
-}
-
-void ComputeContext::EnsureBufferReady(
-        vk::PipelineStageFlagBits src_stage,
-        vk::PipelineStageFlagBits dst_stage,
-        const vk::raii::CommandBuffer &cb, int buf) const {
-    vk::BufferMemoryBarrier barrier{};
-    barrier.setSrcAccessMask(vk::AccessFlagBits::eShaderWrite)
-        .setDstAccessMask(vk::AccessFlagBits::eShaderRead)
-        .setBuffer(*dm_->BufferAt(buf))
-        .setSize(dm_->BufferSize(buf))
-        .setOffset(0)
-        .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-        .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
-    cb.pipelineBarrier(src_stage, dst_stage,
-        {}, nullptr, {barrier}, nullptr);
-}
-
-void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) {
+void ComputeContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
     // u, v, markers → markers
     EnsureBufferReadyForCompute(cb, buffers::kBufV0);
     EnsureBufferReadyForCompute(cb, buffers::kBufV1);
@@ -209,6 +182,22 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) 
     }
 }
 
+void ComputeContext::EnsureBufferReady(
+        vk::PipelineStageFlagBits src_stage,
+        vk::PipelineStageFlagBits dst_stage,
+        const vk::raii::CommandBuffer &cb, int buf) const {
+    vk::BufferMemoryBarrier barrier{};
+    barrier.setSrcAccessMask(vk::AccessFlagBits::eShaderWrite)
+        .setDstAccessMask(vk::AccessFlagBits::eShaderRead)
+        .setBuffer(*dm_->BufferAt(buf))
+        .setSize(dm_->BufferSize(buf))
+        .setOffset(0)
+        .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+        .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
+    cb.pipelineBarrier(src_stage, dst_stage,
+        {}, nullptr, {barrier}, nullptr);
+}
+
 void ComputeContext::InitializeVortexField() const {
     std::vector u_data(cell_count_, 0.0f);
     std::vector v_data(cell_count_, 0.0f);
@@ -223,7 +212,7 @@ void ComputeContext::UploadObstacles(const ObstacleGeometry &geom) {
 
     // 预计算障碍掩码
     vk::CommandBufferAllocateInfo ai{};
-    ai.setCommandPool(dm_->compute_command_pool())
+    ai.setCommandPool(dm_->command_pool())
         .setCommandBufferCount(1)
         .setLevel(vk::CommandBufferLevel::ePrimary);
     auto cbs = dm_->device().allocateCommandBuffers(ai);
@@ -261,7 +250,7 @@ void ComputeContext::DebugReadBackBuffer(const vk::raii::Buffer &buf,
 
     // 分配一次性命令缓冲区
     vk::CommandBufferAllocateInfo cb_ai{};
-    cb_ai.setCommandPool(dm_->compute_command_pool())
+    cb_ai.setCommandPool(dm_->command_pool())
          .setLevel(vk::CommandBufferLevel::ePrimary)
          .setCommandBufferCount(1);
     auto cbs = dm_->device().allocateCommandBuffers(cb_ai);

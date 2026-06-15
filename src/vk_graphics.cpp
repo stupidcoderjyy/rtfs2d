@@ -23,9 +23,6 @@ GraphicsContext::GraphicsContext(DeviceManager& dm, SwapchainContext& sc, Comput
 
 void GraphicsContext::RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t img_idx,
         uint32_t gradient_type, uint32_t vis_mode) const {
-    cb.reset();
-    cb.begin({});
-
     // 图像布局转换：从旧布局到颜色附件最优布局
     vk::ImageMemoryBarrier barrier{};
     vk::ImageSubresourceRange sr{};
@@ -82,7 +79,6 @@ void GraphicsContext::RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t
     cb.endRenderPass();
 
     // 将图像布局转换为呈现源布局
-    cb.end();
     sc_->image_layouts()[img_idx] = vk::ImageLayout::ePresentSrcKHR;
 }
 

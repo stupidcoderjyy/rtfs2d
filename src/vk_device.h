@@ -63,7 +63,6 @@ public:
     const vk::raii::Queue& graphics_queue() const { return *graphics_queue_; }
     const vk::raii::Queue& present_queue() const { return *present_queue_; }
     const vk::raii::CommandPool& command_pool() const { return *command_pool_; }
-    const vk::raii::CommandPool& compute_command_pool() const { return *compute_command_pool_; }
     uint32_t graphics_queue_family_index() const { return graphics_queue_family_index_; }
     uint32_t present_queue_family_index() const { return present_queue_family_index_; }
 private:
@@ -78,7 +77,6 @@ private:
     std::unique_ptr<vk::raii::Queue> graphics_queue_;
     std::unique_ptr<vk::raii::Queue> present_queue_;
     std::unique_ptr<vk::raii::CommandPool> command_pool_;
-    std::unique_ptr<vk::raii::CommandPool> compute_command_pool_;
     struct BufferInfo {
         vk::DeviceSize size;
     };
@@ -95,7 +93,6 @@ private:
     void CheckPhysicalDevice();
     void CreateLogicalDevice();
     void CreateCommandPool();
-    void CreateComputeCommandPool();
 };
 
 }
