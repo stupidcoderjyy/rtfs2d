@@ -3,11 +3,13 @@
 layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 layout(constant_id = 0) const uint NX = 128u;
 layout(constant_id = 1) const uint NY = 128u;
+layout(constant_id = 2) const float DX = 1.0f / 128.0f;
+layout(constant_id = 3) const float DY = 1.0f / 128.0f;
 
 layout(std430, binding = 12) buffer MaskBuf { float data[]; } mask;
 layout(std430, binding = 13) buffer DyeBuf  { float data[]; } dye;
 
-layout(push_constant) uniform Params { float srcX; float srcY; } pc;
+layout(push_constant) uniform Params { float srcX; float srcY; float radius; } pc;
 
 bool isObstacle(uint ci, uint cj) {
     if (ci >= NX || cj >= NY) return false;
@@ -21,11 +23,19 @@ void main() {
     uint i = idx % NX;
     uint j = idx / NX;
     if (isObstacle(i, j)) return;
+    // 网格i,j对应的物理坐标
+    const float IDX_2_PHY_X = DX;
+    const float IDX_2_PHY_Y = DY;
+    float cx = float(i) * DX;
+    float cy = float(j) * DY;
 
-    float x = float(i) / float(NX);
-    float y = float(j) / float(NY);
-    float dist = length(vec2(x - pc.srcX, y - pc.srcY));
-    float ink = max(0.0, 1.0 - dist / 0.03);
+    // 染料位置的物理坐标
+    const float NRM_2_PHY_X = IDX_2_PHY_X * NX;
+    const float NRM_2_PHY_Y = IDX_2_PHY_Y * NY;
+    float mx = pc.srcX * NRM_2_PHY_X;
+    float my = pc.srcY * NRM_2_PHY_Y;
+    float dist = length(vec2(cx - mx, cy - my));
+    float ink = max(0.0, 1.0 - dist / pc.radius);
     if (ink > 0.0) {
         dye.data[idx] = max(dye.data[idx], ink);
     }

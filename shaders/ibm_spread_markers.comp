@@ -3,6 +3,8 @@
 layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 layout(constant_id = 0) const uint NX = 128u;
 layout(constant_id = 1) const uint NY = 128u;
+layout(constant_id = 2) const float INV_DX = 128.0f;
+layout(constant_id = 3) const float INV_DY = 128.0f;
 
 const float DT = 0.016f;
 
@@ -46,8 +48,8 @@ void main() {
     float fx = markers.data[off + 2u];
     float fy = markers.data[off + 3u];
 
-    float gx = mx * float(NX);
-    float gy = my * float(NY);
+    float gx = mx * INV_DX;
+    float gy = my * INV_DY;
     int i0 = int(floor(gx)) - 1;
     int j0 = int(floor(gy)) - 1;
 

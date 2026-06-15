@@ -73,12 +73,13 @@ private:
     std::unique_ptr<FluidSolvers> fluid_solvers_;
     GridParams grid_params_;
     const int cell_count_;
+    const uint32_t poisson_iter_n;
     const vk::DeviceSize compute_buf_size_;
     std::unique_ptr<BoundaryContext> boundary_ctx_;
     uint32_t ibm_marker_count_{};
     VisField vis_field_ = VisField::kVorticity;
-    VisGradient vis_gradient_ = VisGradient::kGray;
-    VisMode vis_mode_ = VisMode::kDye;
+    VisGradient vis_gradient_ = VisGradient::kJet;
+    VisMode vis_mode_ = VisMode::kField;
     bool dye_use_set1_ = false;
     // 是否正在注入染料
     bool dye_injecting_ = false;

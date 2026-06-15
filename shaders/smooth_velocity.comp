@@ -30,7 +30,7 @@ void main() {
 
     float usum = 0.0, vsum = 0.0;
     uint count = 0;
-    const int w = 3;
+    const int w = 1;
     for (int dj = -w; dj <= w; ++dj) {
         for (int di = -w; di <= w; ++di) {
             int ni = int(i) + di;

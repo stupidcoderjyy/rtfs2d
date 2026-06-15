@@ -3,6 +3,8 @@
 layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 layout(constant_id = 0) const uint NX = 128u;
 layout(constant_id = 1) const uint NY = 128u;
+layout(constant_id = 2) const float INV_DX = 128.0f;
+layout(constant_id = 3) const float INV_DY = 128.0f;
 
 const float DT = 0.016f;
 
@@ -34,8 +36,8 @@ float gridVelocity(int ci, int cj, bool is_u) {
 
 // ---------- 将网格速度插值到标记位置 ----------
 float interpVelocity(vec2 mp, bool is_u) {
-    float gx = mp.x * float(NX);
-    float gy = mp.y * float(NY);
+    float gx = mp.x * INV_DX;
+    float gy = mp.y * INV_DY;
     int i0 = int(floor(gx)) - 1;
     int j0 = int(floor(gy)) - 1;
     float sum = 0.0;

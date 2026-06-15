@@ -17,7 +17,10 @@ namespace rtfs2d {
 ComputeContext::ComputeContext(DeviceManager& dm, DescriptorSets& ds, const GridParams& params):
         dm_(&dm), grid_params_(params), ds_(&ds),
         cell_count_(params.TotalCells()),
-        compute_buf_size_(cell_count_ * sizeof(float)) {
+        compute_buf_size_(cell_count_ * sizeof(float)),
+        poisson_iter_n(std::clamp(
+            static_cast<uint32_t>(std::ceil(50 * (0.00195f * grid_params_.dx))),
+            1u, 100u)) {
     boundary_ctx_ = std::make_unique<BoundaryContext>(dm, params);
     InitializeVortexField();
     fluid_solvers_ = std::make_unique<FluidSolvers>(dm, *this, ds);
@@ -71,7 +74,7 @@ void ComputeContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
         if (dye_injecting_) {
             fluid_solvers_->task_dye_source()
                 .Begin(cb, ds_->SetAt(set_dye_src))
-                .PushConstant<float>({dye_x_, dye_y_})
+                .PushConstant<float>({dye_x_, dye_y_, 0.03f})
                 .End(cell_count_);
         }
     }
@@ -86,7 +89,7 @@ void ComputeContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
     float alpha = viscosity * 0.016f / (dx * dx);
     float beta = 4.0f + alpha;
     // 必须是奇数次迭代，否则无法把u、v换到前两个缓冲中
-    for (int iter = 0; iter < 21; ++iter) {
+    for (int iter = 0; iter < poisson_iter_n; ++iter) {
         if (iter & 1) {
             // [0(u), 1(v), 2, 3, 4]
             EnsureBufferReadyForCompute(cb, buffers::kBufV0);

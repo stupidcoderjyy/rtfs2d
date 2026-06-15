@@ -40,15 +40,18 @@ FluidSolvers::FluidSolvers(DeviceManager &dm, ComputeContext &cc, DescriptorSets
         .Build();
     task_ibm_interpolate_ = factory_.Create("shaders/ibm_interpolate.comp.spv")
         .AppendSpecializationConst<uint32_t>({nx, ny})
+        .AppendSpecializationConst<float>({inv_dx, inv_dy})
         .Build();
     task_ibm_spread_ = factory_.Create("shaders/ibm_spread_markers.comp.spv")
         .AppendSpecializationConst<uint32_t>({nx, ny})
+        .AppendSpecializationConst<float>({inv_dx, inv_dy})
         .Build();
     task_ibm_apply_force_ = factory_.Create("shaders/ibm_apply_force.comp.spv")
         .AppendSpecializationConst<uint32_t>({nx, ny})
         .Build();
     task_ibm_mask_ = factory_.Create("shaders/ibm_mask.comp.spv")
         .AppendSpecializationConst<uint32_t>({nx, ny})
+        .AppendSpecializationConst<float>({params.dx, params.dy})
         .Build();
     task_compute_scalar_ = factory_.Create("shaders/compute_scalar.comp.spv")
         .AppendSpecializationConst<uint32_t>({nx, ny})
@@ -64,7 +67,8 @@ FluidSolvers::FluidSolvers(DeviceManager &dm, ComputeContext &cc, DescriptorSets
         .Build();
     task_dye_source_ = factory_.Create("shaders/dye_source.comp.spv")
         .AppendSpecializationConst<uint32_t>({nx, ny})
-        .SetPushConstSize(sizeof(uint32_t) + sizeof(float) * 2)
+        .AppendSpecializationConst<float>({params.dx, params.dy})
+        .SetPushConstSize(sizeof(float) * 3)
         .Build();
 }
 

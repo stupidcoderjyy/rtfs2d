@@ -19,7 +19,7 @@ Window::Window(std::string title, bool debug_enabled):
 void Window::Show() {
     try {
         // Stage 1 加载流场配置
-        GridParams params{2.0f, 1.0f, 1024, 512};
+        GridParams params{3.0f, 1.0f, 1536, 512};
         width_ = params.nx;
         height_ = params.ny;
 
