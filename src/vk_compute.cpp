@@ -15,8 +15,8 @@ namespace rtfs2d {
 
 ComputeContext::ComputeContext(DeviceManager& dm, const GridParams& params):
         dm_(&dm), grid_params_(params),
-        compute_cell_count_(params.TotalCells()),
-        compute_buf_size_(compute_cell_count_ * sizeof(float)) {
+        cell_count_(params.TotalCells()),
+        compute_buf_size_(cell_count_ * sizeof(float)) {
     boundary_ctx_ = std::make_unique<BoundaryContext>(dm, params);
     CreateBuffers();
     CreateDescriptorSets();
@@ -60,7 +60,7 @@ void ComputeContext::EnsureBufferReady(
 }
 
 void ComputeContext::CreateBuffers() const {
-    std::vector host_data(compute_cell_count_, 0.0f);
+    std::vector host_data(cell_count_, 0.0f);
     auto usage = vk::BufferUsageFlagBits::eStorageBuffer
         | vk::BufferUsageFlagBits::eTransferSrc
         | vk::BufferUsageFlagBits::eTransferDst;
@@ -76,10 +76,10 @@ void ComputeContext::CreateBuffers() const {
     dm_->CreateBuffer(buffers::kBufIbmMarker, ObstacleGeometry::kMarkBufferSize,
         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eDeviceLocal);
-    dm_->CreateBuffer(buffers::kBufIbmForce, 2 * compute_cell_count_ * sizeof(float),
+    dm_->CreateBuffer(buffers::kBufIbmForce, 2 * cell_count_ * sizeof(float),
         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eDeviceLocal);
-    dm_->CreateBuffer(buffers::kBufIbmMask, 2 * compute_cell_count_ * sizeof(float),
+    dm_->CreateBuffer(buffers::kBufIbmMask, 2 * cell_count_ * sizeof(float),
         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eDeviceLocal);
     // 初始化为零
@@ -275,7 +275,7 @@ void ComputeContext::CreatePipelineLayout() {
     vk::PipelineLayoutCreateInfo ci{};
     ci.setSetLayoutCount(1)
         .setPSetLayouts(&**descriptor_set_layout_);
-    pipeline_layout_ = std::make_unique<vk::raii::PipelineLayout>(
+    pipeline_layout_ = std::make_shared<vk::raii::PipelineLayout>(
         dm_->device().createPipelineLayout(ci));
 }
 
@@ -284,19 +284,27 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) 
     EnsureBufferReadyForCompute(cb, buffers::kBufV0);
     EnsureBufferReadyForCompute(cb, buffers::kBufV1);
     EnsureBufferReadyForCompute(cb, buffers::kBufIbmMarker);
-    fluid_solvers_->SolveIBMInterpolate(cb, DescriptorSetAt(kSetIbmInterpolate));
+    fluid_solvers_->task_ibm_interpolate()
+        .Begin(cb, DescriptorSetAt(kSetIbmInterpolate))
+        .End(ibm_marker_count_);
     // markers → force
     EnsureBufferReadyForCompute(cb, buffers::kBufIbmMarker);
-    fluid_solvers_->SolveIBMSpread(cb, DescriptorSetAt(kSetIbmSpreadMarkers));
+    fluid_solvers_->task_ibm_spread()
+        .Begin(cb, DescriptorSetAt(kSetIbmSpreadMarkers))
+        .End(ibm_marker_count_);
     // force → u, v
     EnsureBufferReadyForCompute(cb, buffers::kBufIbmForce);
-    fluid_solvers_->SolveIBMApplyForce(cb, DescriptorSetAt(kSetIbmApplyForce));
+    fluid_solvers_->task_ibm_apply_force()
+        .Begin(cb, DescriptorSetAt(kSetIbmApplyForce))
+        .End(cell_count_);
 
     // 平流
     // [0(u_src), 1(v_src), 2(u_dst), 3(v_dst), 4]
     EnsureBufferReadyForCompute(cb, buffers::kBufV0);
     EnsureBufferReadyForCompute(cb, buffers::kBufV1);
-    fluid_solvers_->SolveAdvection(cb, DescriptorSetAt(kSetAdvection));
+    fluid_solvers_->task_advection()
+        .Begin(cb, DescriptorSetAt(kSetAdvection))
+        .End(cell_count_);
 
     if (vis_mode_ == VisMode::kDye) {
         auto set_dye_adv = dye_use_set1_ ? kSetDyeAdvection1 : kSetDyeAdvection2;
@@ -305,10 +313,15 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) 
         // 染料平流
         EnsureBufferReadyForCompute(cb, buffers::kBufV2);
         EnsureBufferReadyForCompute(cb, buffers::kBufV3);
-        fluid_solvers_->SolveDyeAdvection(cb, DescriptorSetAt(set_dye_adv));
+        fluid_solvers_->task_dye_advection()
+            .Begin(cb, DescriptorSetAt(set_dye_adv))
+            .End(cell_count_);
         // 在 dye_dst 上添加染料
         if (dye_injecting_) {
-            fluid_solvers_->AddDyeSource(cb, DescriptorSetAt(set_dye_src), dye_x_, dye_y_);
+            fluid_solvers_->task_dye_source()
+                .Begin(cb, DescriptorSetAt(set_dye_src))
+                .PushConstant<float>({dye_x_, dye_y_})
+                .End(cell_count_);
         }
     }
 
@@ -327,13 +340,19 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) 
             // [0(u), 1(v), 2, 3, 4]
             EnsureBufferReadyForCompute(cb, buffers::kBufV0);
             EnsureBufferReadyForCompute(cb, buffers::kBufV1);
-            fluid_solvers_->SolveDiffusion(cb, DescriptorSetAt(kSetDiffusionOdd), alpha, beta);
+            fluid_solvers_->task_diffusion()
+                .Begin(cb, DescriptorSetAt(kSetDiffusionOdd))
+                .PushConstant<float>({alpha, beta})
+                .End(cell_count_);
             // [0, 1, 2(u), 3(v), 4]
         } else {
             // [0, 1, 2(u), 3(v), 4]
             EnsureBufferReadyForCompute(cb, buffers::kBufV2);
             EnsureBufferReadyForCompute(cb, buffers::kBufV3);
-            fluid_solvers_->SolveDiffusion(cb, DescriptorSetAt(kSetDiffusionEven), alpha, beta);
+            fluid_solvers_->task_diffusion()
+                .Begin(cb, DescriptorSetAt(kSetDiffusionEven))
+                .PushConstant<float>({alpha, beta})
+                .End(cell_count_);
             // [0(u), 1(v), 2, 3, 4] -> 退出循环 | 进入另一个分支
         }
     }
@@ -342,7 +361,9 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) 
     // [0(u), 1(v), 2(div), 3, 4]
     EnsureBufferReadyForCompute(cb, buffers::kBufV0);
     EnsureBufferReadyForCompute(cb, buffers::kBufV1);
-    fluid_solvers_->SolveDivergence(cb, DescriptorSetAt(kSetDivergence));
+    fluid_solvers_->task_divergence()
+        .Begin(cb, DescriptorSetAt(kSetDivergence))
+        .End(cell_count_);
 
     // 压力求解迭代（雅可比迭代解泊松方程） u, v, div → p
     float alpha_p = -(dx * dx);
@@ -351,12 +372,18 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) 
         if (iter & 1) {
             //[0(u), 1(v), 2(div), 3(pi), 4(po)]
             EnsureBufferReadyForCompute(cb, buffers::kBufV3);
-            fluid_solvers_->SolvePoisson(cb, DescriptorSetAt(kSetPressureOdd), alpha_p, beta_p);
+            fluid_solvers_->task_poisson()
+                .Begin(cb, DescriptorSetAt(kSetPressureOdd))
+                .PushConstant<float>({alpha_p, beta_p})
+                .End(cell_count_);
             //[0(u), 1(v), 2(div), 3, 4(pi)] -> 退出循环
         } else {
             //[0(u), 1(v), 2(div), 3(po), 4(pi)]
             EnsureBufferReadyForCompute(cb, buffers::kBufV4);
-            fluid_solvers_->SolvePoisson(cb, DescriptorSetAt(kSetPressureEven), alpha_p, beta_p);
+            fluid_solvers_->task_poisson()
+                .Begin(cb, DescriptorSetAt(kSetPressureEven))
+                .PushConstant<float>({alpha_p, beta_p})
+                .End(cell_count_);
             //[0(u), 1(v), 2(div), 3(pi), 4]
         }
     }
@@ -364,7 +391,9 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) 
     // 压力投影 p → u,v
     // [0(u), 1(v), 2(div), 3, 4(p)]
     EnsureBufferReadyForCompute(cb, buffers::kBufV4);
-    fluid_solvers_->SolveProjection(cb, DescriptorSetAt(kSetProjection));
+    fluid_solvers_->task_projection()
+        .Begin(cb, DescriptorSetAt(kSetProjection))
+        .End(cell_count_);
     // [0(u), 1(v), 2(div), 3, 4(p)]
 
     if (vis_mode_ == VisMode::kDye) {
@@ -378,27 +407,33 @@ void ComputeContext::RecordFluidStepCommands(const vk::raii::CommandBuffer& cb) 
             // [0(u_src), 1(v_src), 2(scalar), 3(u_sm), 4, 5(v_sm)]
             EnsureBufferReadyForCompute(cb, buffers::kBufV0);
             EnsureBufferReadyForCompute(cb, buffers::kBufV1);
-            fluid_solvers_->SmoothVelocity(cb, DescriptorSetAt(kSetSmoothVelocity));
+            fluid_solvers_->task_smooth_velocity()
+                .Begin(cb, DescriptorSetAt(kSetSmoothVelocity))
+                .End(cell_count_);
             // [0, 1, 2(scalar), 3(u_sm), 4, 5(v_sm)]
             EnsureBufferReadyForCompute(cb, buffers::kBufV3);
             EnsureBufferReadyForCompute(cb, buffers::kBufV5);
-            fluid_solvers_->ComputeScalar(cb, DescriptorSetAt(kSetComputeScalarVI),
-                static_cast<uint32_t>(vis_field_));
+            fluid_solvers_->task_compute_scalar()
+                .Begin(cb, DescriptorSetAt(kSetComputeScalarVI))
+                .PushConstant<uint32_t>({static_cast<uint32_t>(vis_field_)})
+                .End(cell_count_);
         } else {
             // [0(u), 1(v), 2(scalar), 3, 4(p)]
             EnsureBufferReadyForCompute(cb, buffers::kBufV0);
             EnsureBufferReadyForCompute(cb, buffers::kBufV1);
-            fluid_solvers_->ComputeScalar(cb, DescriptorSetAt(kSetComputeScalarOthers),
-                static_cast<uint32_t>(vis_field_));
+            fluid_solvers_->task_compute_scalar()
+                .Begin(cb, DescriptorSetAt(kSetComputeScalarOthers))\
+                .PushConstant<uint32_t>({static_cast<uint32_t>(vis_field_)})
+                .End(cell_count_);
+            EnsureBufferReady(vk::PipelineStageFlagBits::eComputeShader,
+                vk::PipelineStageFlagBits::eFragmentShader, cb, buffers::kBufV2);
         }
-        EnsureBufferReady(vk::PipelineStageFlagBits::eComputeShader,
-            vk::PipelineStageFlagBits::eFragmentShader, cb, buffers::kBufV2);
     }
 }
 
 void ComputeContext::InitializeVortexField() const {
-    std::vector u_data(compute_cell_count_, 0.0f);
-    std::vector v_data(compute_cell_count_, 0.0f);
+    std::vector u_data(cell_count_, 0.0f);
+    std::vector v_data(cell_count_, 0.0f);
     dm_->UploadDeviceBufferData(u_data, dm_->BufferAt(buffers::kBufV0));
     dm_->UploadDeviceBufferData(v_data, dm_->BufferAt(buffers::kBufV1));
 }
@@ -417,7 +452,9 @@ void ComputeContext::UploadObstacles(const ObstacleGeometry &geom) {
     auto& cb = cbs[0];
     auto queue = dm_->graphics_queue();
     cb.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-    fluid_solvers_->PrecomputeIBMMask(cb, DescriptorSetAt(kSetIbmMask)); //描述符集随便选一个即可
+    fluid_solvers_->task_ibm_mask()
+        .Begin(cb, DescriptorSetAt(kSetIbmMask)) //描述符集随便选一个即可
+        .End(cell_count_);
     cb.end();
     vk::SubmitInfo si{};
     si.setCommandBuffers(*cb);
@@ -514,7 +551,7 @@ void ComputeContext::DebugReadBackVelocityBufferPoints(
         auto* ptr = static_cast<float*>(p);
         std::string msg = log_prefix + ": ";
         for (int idx : indexes) {
-            if (idx >= 0 && idx < static_cast<int>(compute_cell_count_)) {
+            if (idx >= 0 && idx < static_cast<int>(cell_count_)) {
                 msg += "[" + std::to_string(idx) + "]=" + std::to_string(ptr[idx]) + " ";
             } else {
                 msg += "[" + std::to_string(idx) + "]=out_of_range ";

@@ -16,18 +16,9 @@ struct GridParams {
     float dy = 1.0f / static_cast<float>(ny);
 
     GridParams(int nx, int ny);
-
-    int Index(int i, int j) const {
-        return i + j * nx;
-    }
-
-    int TotalCells() const {
-        return nx * ny;
-    }
-
-    int InteriorCells() const {
-        return (nx - 2) * (ny - 2);
-    }
+    int Index(int i, int j) const { return i + j * nx; }
+    int TotalCells() const { return nx * ny; }
+    int InteriorCells() const { return (nx - 2) * (ny - 2); }
 };
 
 class ScalarField {
@@ -54,14 +45,8 @@ public:
         u_(i, j) = u_val;
         v_(i, j) = v_val;
     }
-
-    float U(int i, int j) const {
-        return u_(i, j);
-    }
-
-    float V(int i, int j) const {
-        return v_(i, j);
-    }
+    float U(int i, int j) const { return u_(i, j); }
+    float V(int i, int j) const { return v_(i, j); }
 private:
     ScalarField u_;
     ScalarField v_;

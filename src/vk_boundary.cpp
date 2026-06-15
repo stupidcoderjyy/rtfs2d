@@ -7,7 +7,6 @@
 #include <ranges>
 #include "grid.h"
 #include "vk_device.h"
-#include "vk_memory.h"
 
 namespace rtfs2d {
 

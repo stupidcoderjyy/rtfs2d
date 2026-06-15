@@ -12,8 +12,8 @@ add_library(${TARGET} STATIC
         vk_graphics.cpp
         vk_memory.cpp
         vk_swapchain.cpp
-        vorticity_solver.cpp
         window.cpp
+        compute_pipeline_factory.cpp
 )
 add_library(rtfs2d::core ALIAS ${TARGET})
 target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

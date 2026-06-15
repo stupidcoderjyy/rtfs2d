@@ -8,6 +8,8 @@
 #include <memory>
 #include <vulkan/vulkan_raii.hpp>
 
+#include "compute_pipeline_factory.h"
+
 namespace rtfs2d {
 
 class DeviceManager;
@@ -17,54 +19,37 @@ class FluidSolvers {
 public:
     FluidSolvers(DeviceManager& dm, ComputeContext& cc);
 
-    void SolveAdvection(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
-    void SolveDivergence(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
-    void SolveDiffusion(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds,
-        float alpha, float beta) const;
-    void SolvePoisson(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds,
-        float alpha, float beta) const;
-    void SolveProjection(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
-    void SolveVorticity(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds,
-        float epsilon) const;
-    void SolveIBMInterpolate(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
-    void SolveIBMSpread(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
-    void SolveIBMApplyForce(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
-    void PrecomputeIBMMask(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
-    void ComputeScalar(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet &ds,
-        uint32_t mode) const;
-    void SmoothVelocity(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
-    void SolveDyeAdvection(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds) const;
-    void AddDyeSource(const vk::raii::CommandBuffer& cb, const vk::raii::DescriptorSet& ds,
-        float x, float y) const;
-private:
-    static constexpr int kWorkGroupSize = 128;
-    DeviceManager* dm_;
-    ComputeContext* cc_;
-    std::unique_ptr<vk::raii::Pipeline> pipeline_advection_;
-    std::unique_ptr<vk::raii::Pipeline> pipeline_divergence_;
-    std::unique_ptr<vk::raii::Pipeline> pipeline_diffusion_;
-    std::unique_ptr<vk::raii::PipelineLayout> layout_diffusion_;
-    std::unique_ptr<vk::raii::Pipeline> pipeline_poisson_;
-    std::unique_ptr<vk::raii::PipelineLayout> layout_poisson_;
-    std::unique_ptr<vk::raii::Pipeline> pipeline_projection_;
-    std::unique_ptr<vk::raii::PipelineLayout> layout_vorticity_;
-    std::unique_ptr<vk::raii::Pipeline> pipeline_vorticity_;
-    std::unique_ptr<vk::raii::Pipeline> pipeline_ibm_interpolate_;
-    std::unique_ptr<vk::raii::Pipeline> pipeline_ibm_spread_;
-    std::unique_ptr<vk::raii::Pipeline> pipeline_ibm_apply_force_;
-    std::unique_ptr<vk::raii::Pipeline> pipeline_ibm_mask_;
-    std::unique_ptr<vk::raii::Pipeline> pipeline_compute_scalar_;
-    std::unique_ptr<vk::raii::PipelineLayout> layout_compute_scalar_;
-    std::unique_ptr<vk::raii::Pipeline> pipeline_smooth_velocity_;
-    std::unique_ptr<vk::raii::Pipeline> pipeline_dye_advection_;
-    std::unique_ptr<vk::raii::Pipeline> pipeline_dye_source_;
-    std::unique_ptr<vk::raii::PipelineLayout> layout_dye_source_;
+    ComputeShaderTask& task_advection() const { return *task_advection_; }
+    ComputeShaderTask& task_divergence() const { return *task_divergence_; }
+    ComputeShaderTask& task_diffusion() const { return *task_diffusion_; }
+    ComputeShaderTask& task_poisson() const { return *task_poisson_; }
+    ComputeShaderTask& task_projection() const { return *task_projection_; }
+    ComputeShaderTask& task_vorticity() const { return *task_vorticity_; }
+    ComputeShaderTask& task_ibm_interpolate() const { return *task_ibm_interpolate_; }
+    ComputeShaderTask& task_ibm_spread() const { return *task_ibm_spread_; }
+    ComputeShaderTask& task_ibm_apply_force() const { return *task_ibm_apply_force_; }
+    ComputeShaderTask& task_ibm_mask() const { return *task_ibm_mask_; }
+    ComputeShaderTask& task_compute_scalar() const { return *task_compute_scalar_; }
+    ComputeShaderTask& task_smooth_velocity() const { return *task_smooth_velocity_; }
+    ComputeShaderTask& task_dye_advection() const { return *task_dye_advection_; }
+    ComputeShaderTask& task_dye_source() const { return *task_dye_source_; }
 
-    std::unique_ptr<vk::raii::Pipeline> CreateSolverPipeline(const std::string& shader) const;
-    void CreateJacobiPipelines();
-    void CreateVorticitySolverPipeline();
-    void CreateComputeScalarPipeline();
-    void CreateDyeSourcePipeline();
+private:
+    ComputeShaderTaskFactory factory_;
+    std::unique_ptr<ComputeShaderTask> task_advection_;
+    std::unique_ptr<ComputeShaderTask> task_divergence_;
+    std::unique_ptr<ComputeShaderTask> task_diffusion_;
+    std::unique_ptr<ComputeShaderTask> task_poisson_;
+    std::unique_ptr<ComputeShaderTask> task_projection_;
+    std::unique_ptr<ComputeShaderTask> task_vorticity_;
+    std::unique_ptr<ComputeShaderTask> task_ibm_interpolate_;
+    std::unique_ptr<ComputeShaderTask> task_ibm_spread_;
+    std::unique_ptr<ComputeShaderTask> task_ibm_apply_force_;
+    std::unique_ptr<ComputeShaderTask> task_ibm_mask_;
+    std::unique_ptr<ComputeShaderTask> task_compute_scalar_;
+    std::unique_ptr<ComputeShaderTask> task_smooth_velocity_;
+    std::unique_ptr<ComputeShaderTask> task_dye_advection_;
+    std::unique_ptr<ComputeShaderTask> task_dye_source_;
 };
 
 }

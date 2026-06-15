@@ -81,9 +81,9 @@ public:
     }
     const vk::raii::DescriptorSetLayout& descriptor_set_layout() const { return *descriptor_set_layout_; }
     const GridParams& grid_params() const { return grid_params_; }
-    int cell_count() const { return compute_cell_count_; }
+    int cell_count() const { return cell_count_; }
     vk::DeviceSize buf_size() const { return compute_buf_size_; }
-    const vk::raii::PipelineLayout& pipeline_layout() const { return *pipeline_layout_; }
+    std::shared_ptr<vk::raii::PipelineLayout> pipeline_layout() const { return pipeline_layout_; }
     BoundaryContext& boundary_ctx() const { return *boundary_ctx_; }
     uint32_t ibm_marker_count() const { return ibm_marker_count_; }
     VisField vis_field() const { return vis_field_; }
@@ -98,12 +98,12 @@ private:
     DeviceManager* dm_;
     // v0, v1, v2, v3, v4, v5, bc1, bc2, bc3, bc4, poly, marker, force, mask
     std::unique_ptr<vk::raii::DescriptorSetLayout> descriptor_set_layout_;
-    std::unique_ptr<vk::raii::PipelineLayout> pipeline_layout_;
+    std::shared_ptr<vk::raii::PipelineLayout> pipeline_layout_;
     std::unique_ptr<vk::raii::DescriptorPool> descriptor_pool_;
     std::vector<std::unique_ptr<vk::raii::DescriptorSet>> descriptor_sets_;
     std::unique_ptr<FluidSolvers> fluid_solvers_;
     GridParams grid_params_;
-    const int compute_cell_count_;
+    const int cell_count_;
     const vk::DeviceSize compute_buf_size_;
     std::unique_ptr<BoundaryContext> boundary_ctx_;
     uint32_t ibm_marker_count_{};
