@@ -5,7 +5,7 @@ layout(constant_id = 0) const uint NX = 128u;
 layout(constant_id = 1) const uint NY = 128u;
 layout(constant_id = 2) const float INV_DX = 128.0;
 layout(constant_id = 3) const float INV_DY = 128.0;
-const float DT = 0.016f;
+layout(push_constant) uniform Params { float dt; } pc;
 
 layout(std430, binding = 0) buffer USrc { float data[]; } uSrc;
 layout(std430, binding = 1) buffer UDst { float data[]; } vSrc;
@@ -111,8 +111,8 @@ void main() {
     float v = vSrc.data[idx];
 
     // 反向追踪
-    float bx = float(i) + 0.5f - u * DT * INV_DX;
-    float by = float(j) + 0.5f - v * DT * INV_DY;
+    float bx = float(i) + 0.5f - u * pc.dt * INV_DX;
+    float by = float(j) + 0.5f - v * pc.dt * INV_DY;
     float sx = bx - 0.5f, sy = by - 0.5f;
 
     uDst.data[idx] = sampleBilinear(sx, sy, true);

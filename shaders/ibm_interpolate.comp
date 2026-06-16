@@ -6,7 +6,7 @@ layout(constant_id = 1) const uint NY = 128u;
 layout(constant_id = 2) const float INV_DX = 128.0f;
 layout(constant_id = 3) const float INV_DY = 128.0f;
 
-const float DT = 0.016f;
+layout(push_constant) uniform Params { float dt; } pc;
 
 layout(std430, binding = 0) buffer UField { float data[]; } u;
 layout(std430, binding = 1) buffer VField { float data[]; } v;
@@ -64,8 +64,8 @@ void main() {
     float vy = interpVelocity(vec2(mx, my), false);
 
     // 直接力公式：F = (0 - v_interp) / dt
-    float fx = -vx / DT;
-    float fy = -vy / DT;
+    float fx = -vx  / pc.dt;
+    float fy = -vy  / pc.dt;
 
     markers.data[off + 2u] = fx;
     markers.data[off + 3u] = fy;

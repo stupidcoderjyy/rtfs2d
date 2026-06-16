@@ -27,6 +27,7 @@ private:
     std::unique_ptr<GraphicsContext> graphics_ctx_;
     std::unique_ptr<ImGuiVulkanContext> imgui_ctx_;
     std::unique_ptr<CaseData> case_data_;
+    VisConfig vis_config_;
     bool debug_enabled_;
     size_t current_frame_ = 0;
 

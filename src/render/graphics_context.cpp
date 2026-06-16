@@ -14,6 +14,7 @@
 #include "vulkan/swapchain_context.h"
 #include "solver/compute_context.h"
 #include "solver/case_data.h"
+#include "vis_config.h"
 
 namespace rtfs2d {
 
@@ -60,8 +61,7 @@ void GraphicsContext::EndRenderPass(const vk::raii::CommandBuffer &cb, uint32_t 
     sc_->image_layouts()[img_idx] = vk::ImageLayout::ePresentSrcKHR;
 }
 
-void GraphicsContext::RecordCommands(const vk::raii::CommandBuffer &cb,
-        uint32_t gradient_type, uint32_t vis_mode) const {
+void GraphicsContext::RecordCommands(const vk::raii::CommandBuffer &cb, VisConfig& vis_config) const {
     // 设置动态视口和剪刀（必须与交换链尺寸一致）
     vk::Viewport viewport(0.0f, 0.0f,
         static_cast<float>(sc_->extent().width),
@@ -79,8 +79,15 @@ void GraphicsContext::RecordCommands(const vk::raii::CommandBuffer &cb,
         **graphics_pipeline_layout_, 0,
         *ds_->SetAt(cc_->GetVisDescriptorSetIndex()), nullptr);
 
+    std::array push_constants{
+        static_cast<uint32_t>(vis_config.vis_gradient),
+        static_cast<uint32_t>(vis_config.vis_mode),
+        vis_config.dye_colors_[0],
+        vis_config.dye_colors_[1],
+        vis_config.dye_colors_[2],
+    };
     cb.pushConstants<uint32_t>(**graphics_pipeline_layout_,
-        vk::ShaderStageFlagBits::eFragment, 0, {gradient_type, vis_mode});
+        vk::ShaderStageFlagBits::eFragment, 0, push_constants);
 
     // 绘制全屏三角形（3个顶点）
     cb.draw(3, 1, 0, 0);
@@ -165,7 +172,7 @@ void GraphicsContext::CreateGraphicsPipeline() {
     vk::PushConstantRange pcr{};
     pcr.setStageFlags(vk::ShaderStageFlagBits::eFragment)
         .setOffset(0)
-        .setSize(2 * sizeof(uint32_t));
+        .setSize(5 * sizeof(uint32_t));
 
     // 管线布局
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};

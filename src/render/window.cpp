@@ -8,6 +8,8 @@
 #include <stdexcept>
 
 #include "window.h"
+#include "imgui_control_panel.h"
+#include "backends/imgui_impl_glfw.h"
 #include "solver/case_data.h"
 #include "vulkan/descriptor_sets.h"
 #include "vulkan/buffers.h"
@@ -35,12 +37,14 @@ void Window::Show() {
         swapchain_ctx_ = std::make_unique<SwapchainContext>(*device_manager_, width_, height_);
         buffers::InitBuffers(*device_manager_, *case_data_);
         DescriptorSets descriptor_sets(*device_manager_);
-        compute_ctx_ = std::make_unique<ComputeContext>(*device_manager_, descriptor_sets, *case_data_);
+        compute_ctx_ = std::make_unique<ComputeContext>(*device_manager_, descriptor_sets,
+            *case_data_, vis_config_);
         graphics_ctx_ = std::make_unique<GraphicsContext>(*device_manager_, *swapchain_ctx_,
             *compute_ctx_, descriptor_sets, *case_data_);
         imgui_ctx_ = std::make_unique<ImGuiVulkanContext>(window_,
             *device_manager_, *swapchain_ctx_->render_pass(),
             swapchain_ctx_->swapchain_images().size());
+        ImGuiControlPanel imgui_control(vis_config_);
         //上传流程数据
         compute_ctx_->UploadCaseData();
 
@@ -106,11 +110,13 @@ void Window::Show() {
             // 开始渲染
             graphics_ctx_->BeginRenderPass(cb, img_idx);
 
-            // GUI渲染
-            imgui_ctx_->RecordCommands(cb);
             // 流场渲染
-            graphics_ctx_->RecordCommands(cb, static_cast<uint32_t>(compute_ctx_->vis_gradient()),
-                static_cast<uint32_t>(compute_ctx_->vis_mode()));
+            graphics_ctx_->RecordCommands(cb, vis_config_);
+
+            // GUI渲染
+            imgui_ctx_->BeginFrame();
+            imgui_control.Render();
+            imgui_ctx_->EndFrame(cb);
 
             // 渲染结束
             graphics_ctx_->EndRenderPass(cb, img_idx);
@@ -150,6 +156,10 @@ void Window::Show() {
 }
 
 void Window::MouseButtonCallback(GLFWwindow *window, int button, int action, int mods) {
+    ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
+    if (ImGui::GetIO().WantCaptureMouse) {
+        return;
+    }
     auto* w = static_cast<Window*>(glfwGetWindowUserPointer(window));
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
         if (action == GLFW_PRESS) {
@@ -161,6 +171,10 @@ void Window::MouseButtonCallback(GLFWwindow *window, int button, int action, int
 }
 
 void Window::CursorPosCallback(GLFWwindow *window, double xpos, double ypos) {
+    ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
+    if (ImGui::GetIO().WantCaptureMouse) {
+        return;
+    }
     auto* w = static_cast<Window*>(glfwGetWindowUserPointer(window));
     float nx = static_cast<float>(xpos) / static_cast<float>(w->width_);
     float ny = static_cast<float>(ypos) / static_cast<float>(w->height_); // 翻转 Y 轴

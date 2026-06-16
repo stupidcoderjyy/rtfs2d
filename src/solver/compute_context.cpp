@@ -15,8 +15,12 @@
 
 namespace rtfs2d {
 
-ComputeContext::ComputeContext(DeviceManager& dm, DescriptorSets& ds, const CaseData& case_data):
-        dm_(&dm), case_data_(&case_data), ds_(&ds),
+ComputeContext::ComputeContext(
+        DeviceManager& dm,
+        DescriptorSets& ds,
+        const CaseData& case_data,
+        VisConfig& vis_config)
+        : dm_(&dm), case_data_(&case_data), ds_(&ds), vis_config_(&vis_config),
         cell_count_(case_data.total_cells()),
         compute_buf_size_(cell_count_ * sizeof(float)),
         poisson_iter_n(std::clamp(
@@ -38,11 +42,13 @@ void ComputeContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
     EnsureBufferReadyForCompute(cb, buffers::kBufIbmMarker);
     fluid_solvers_->task_ibm_interpolate()
         .Begin(cb, ds_->SetAt(kSetIbmInterpolate))
+        .PushConstant<float>(vis_config_->time_step)
         .End(ibm_marker_count_);
     // markers → force
     EnsureBufferReadyForCompute(cb, buffers::kBufIbmMarker);
     fluid_solvers_->task_ibm_spread()
         .Begin(cb, ds_->SetAt(kSetIbmSpreadMarkers))
+        .PushConstant<float>(vis_config_->time_step)
         .End(ibm_marker_count_);
     // force → u, v
     EnsureBufferReadyForCompute(cb, buffers::kBufIbmForce);
@@ -56,9 +62,10 @@ void ComputeContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
     EnsureBufferReadyForCompute(cb, buffers::kBufV1);
     fluid_solvers_->task_advection()
         .Begin(cb, ds_->SetAt(kSetAdvection))
+        .PushConstant<float>(vis_config_->time_step)
         .End(cell_count_);
 
-    if (vis_mode_ == VisMode::kDye) {
+    if (vis_config_->vis_mode == VisMode::kDye) {
         auto set_dye_adv = dye_use_set1_ ? kSetDyeAdvection1 : kSetDyeAdvection2;
         auto set_dye_src = dye_use_set1_ ? kSetDyeSource1 : kSetDyeSource2;
         dye_use_set1_ = !dye_use_set1_;
@@ -67,12 +74,13 @@ void ComputeContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
         EnsureBufferReadyForCompute(cb, buffers::kBufV3);
         fluid_solvers_->task_dye_advection()
             .Begin(cb, ds_->SetAt(set_dye_adv))
+            .PushConstant<float>(vis_config_->time_step)
             .End(cell_count_);
         // 在 dye_dst 上添加染料
         if (dye_injecting_) {
             fluid_solvers_->task_dye_source()
                 .Begin(cb, ds_->SetAt(set_dye_src))
-                .PushConstant<float>({dye_x_, dye_y_, 0.03f})
+                .PushConstant<float>({dye_x_, dye_y_, vis_config_->dye_radius})
                 .End(cell_count_);
         }
     }
@@ -84,7 +92,7 @@ void ComputeContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
     // 扩散迭代（u 和 v 各做一次雅可比迭代）
     float viscosity = 0.8f;
     float dx = case_data_->dx();
-    float alpha = viscosity * 0.016f / (dx * dx);
+    float alpha = viscosity * vis_config_->time_step / (dx * dx);
     float beta = 4.0f + alpha;
     // 必须是奇数次迭代，否则无法把u、v换到前两个缓冲中
     for (int iter = 0; iter < poisson_iter_n; ++iter) {
@@ -126,7 +134,7 @@ void ComputeContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
             EnsureBufferReadyForCompute(cb, buffers::kBufV3);
             fluid_solvers_->task_poisson()
                 .Begin(cb, ds_->SetAt(kSetPressureOdd))
-                .PushConstant<float>({alpha_p, beta_p})
+                .PushConstant<float>({alpha_p, beta_p, vis_config_->time_step})
                 .End(cell_count_);
             //[0(u), 1(v), 2(div), 3, 4(pi)] -> 退出循环
         } else {
@@ -134,7 +142,7 @@ void ComputeContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
             EnsureBufferReadyForCompute(cb, buffers::kBufV4);
             fluid_solvers_->task_poisson()
                 .Begin(cb, ds_->SetAt(kSetPressureEven))
-                .PushConstant<float>({alpha_p, beta_p})
+                .PushConstant<float>({alpha_p, beta_p, vis_config_->time_step})
                 .End(cell_count_);
             //[0(u), 1(v), 2(div), 3(pi), 4]
         }
@@ -145,15 +153,16 @@ void ComputeContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
     EnsureBufferReadyForCompute(cb, buffers::kBufV4);
     fluid_solvers_->task_projection()
         .Begin(cb, ds_->SetAt(kSetProjection))
+        .PushConstant<float>(vis_config_->time_step)
         .End(cell_count_);
     // [0(u), 1(v), 2(div), 3, 4(p)]
 
-    if (vis_mode_ == VisMode::kDye) {
+    if (vis_config_->vis_mode == VisMode::kDye) {
         auto buf_dye_dst = dye_use_set1_ ? buffers::kBufV5 : buffers::kBufV6;
         EnsureBufferReady(vk::PipelineStageFlagBits::eComputeShader,
             vk::PipelineStageFlagBits::eFragmentShader, cb, buf_dye_dst);
     } else {
-        if (vis_field_ == VisField::kVorticity) {
+        if (vis_config_->vis_field == VisField::kVorticity) {
             // 平滑速度场以消除涡量可视化中的锯齿
             // u_src, v_src → u_dst, v_dst
             // [0(u_src), 1(v_src), 2(scalar), 3(u_sm), 4, 5(v_sm)]
@@ -167,7 +176,8 @@ void ComputeContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
             EnsureBufferReadyForCompute(cb, buffers::kBufV5);
             fluid_solvers_->task_compute_scalar()
                 .Begin(cb, ds_->SetAt(kSetComputeScalarVI))
-                .PushConstant<uint32_t>({static_cast<uint32_t>(vis_field_)})
+                .PushConstant<uint32_t>({static_cast<uint32_t>(vis_config_->vis_field)})
+                .PushConstant<float>(vis_config_->CurrentFieldCoeff(), sizeof(uint32_t))
                 .End(cell_count_);
         } else {
             // [0(u), 1(v), 2(scalar), 3, 4(p)]
@@ -175,7 +185,8 @@ void ComputeContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
             EnsureBufferReadyForCompute(cb, buffers::kBufV1);
             fluid_solvers_->task_compute_scalar()
                 .Begin(cb, ds_->SetAt(kSetComputeScalarOthers))\
-                .PushConstant<uint32_t>({static_cast<uint32_t>(vis_field_)})
+                .PushConstant<uint32_t>({static_cast<uint32_t>(vis_config_->vis_field)})
+                .PushConstant<float>(vis_config_->CurrentFieldCoeff(), sizeof(uint32_t))
                 .End(cell_count_);
             EnsureBufferReady(vk::PipelineStageFlagBits::eComputeShader,
                 vk::PipelineStageFlagBits::eFragmentShader, cb, buffers::kBufV2);

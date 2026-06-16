@@ -15,8 +15,10 @@ class DeviceManager;
 class ImGuiVulkanContext {
 public:
     ImGuiVulkanContext(GLFWwindow* window, DeviceManager& dm, vk::RenderPass render_pass, uint32_t swapchain_image_count);
-    void RecordCommands(const vk::raii::CommandBuffer& cb);
-    void Shutdown();
+
+    static void BeginFrame();
+    static void EndFrame(const vk::raii::CommandBuffer& cb);
+    static void Shutdown();
 private:
     std::unique_ptr<vk::raii::DescriptorPool> imgui_descriptor_pool_;
 };

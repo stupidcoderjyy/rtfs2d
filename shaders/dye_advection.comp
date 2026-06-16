@@ -5,7 +5,7 @@ layout(constant_id = 0) const uint NX = 128u;
 layout(constant_id = 1) const uint NY = 128u;
 layout(constant_id = 2) const float INV_DX = 128.0;
 layout(constant_id = 3) const float INV_DY = 128.0;
-const float DT = 0.016f;
+layout(push_constant) uniform Params { float dt; } pc;
 
 layout(std430, binding = 0)  buffer USrc    { float data[]; } u;
 layout(std430, binding = 1)  buffer VSrc    { float data[]; } v;
@@ -131,8 +131,8 @@ void main() {
     float vel_u = getU(int(i), int(j));
     float vel_v = getV(int(i), int(j));
 
-    float bx = float(i) + 0.5 - vel_u * DT * INV_DX;
-    float by = float(j) + 0.5 - vel_v * DT * INV_DY;
+    float bx = float(i) + 0.5 - vel_u * pc.dt * INV_DX;
+    float by = float(j) + 0.5 - vel_v * pc.dt * INV_DY;
     float sx = bx - 0.5;
     float sy = by - 0.5;
 

@@ -27,7 +27,7 @@ ImGuiVulkanContext::ImGuiVulkanContext(
     ImGui::StyleColorsDark();
 
     // 2. 绑定 GLFW 后端
-    ImGui_ImplGlfw_InitForVulkan(window, true);
+    ImGui_ImplGlfw_InitForVulkan(window, false);
 
     // 3. 创建 ImGui 专用的 Vulkan 描述符池
     constexpr uint32_t pool_count = 16;  // 可根据需要增大
@@ -62,13 +62,15 @@ ImGuiVulkanContext::ImGuiVulkanContext(
     spdlog::info("ImGui Vulkan context initialized");
 }
 
-void ImGuiVulkanContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
+void ImGuiVulkanContext::BeginFrame() {
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
+}
+
+void ImGuiVulkanContext::EndFrame(const vk::raii::CommandBuffer &cb) {
     ImGui::Render();
-    ImDrawData* draw_data = ImGui::GetDrawData();
-    if (draw_data != nullptr) {
+    if (ImDrawData* draw_data = ImGui::GetDrawData(); draw_data != nullptr) {
         ImGui_ImplVulkan_RenderDrawData(draw_data, *cb);
     }
 }

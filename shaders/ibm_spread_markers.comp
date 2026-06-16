@@ -6,7 +6,7 @@ layout(constant_id = 1) const uint NY = 128u;
 layout(constant_id = 2) const float INV_DX = 128.0f;
 layout(constant_id = 3) const float INV_DY = 128.0f;
 
-const float DT = 0.016f;
+layout(push_constant) uniform Params { float dt; } pc;
 
 layout(std430, binding = 10) buffer MarkerField { uint marker_count; float data[]; } markers;
 layout(std430, binding = 11) buffer ForceField { uint data[]; } force;
@@ -63,8 +63,8 @@ void main() {
             float w = delta1D(gx - float(ci)) * delta1D(gy - float(cj));
             uint gidx = uint(ci) + uint(cj) * NX;
 
-            atomicAddFloat(gidx * 2u,      w * fx * DT);
-            atomicAddFloat(gidx * 2u + 1u,  w * fy * DT);
+            atomicAddFloat(gidx * 2u,      w * fx * pc.dt);
+            atomicAddFloat(gidx * 2u + 1u,  w * fy * pc.dt);
         }
     }
 }

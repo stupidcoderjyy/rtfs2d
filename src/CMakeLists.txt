@@ -4,6 +4,8 @@ add_library(${TARGET} STATIC
         render/graphics_context.cpp
         render/imgui_vulkan_context.cpp
         render/window.cpp
+        render/vis_config.cpp
+        render/imgui_control_panel.cpp
         vulkan/buffers.cpp
         vulkan/compute_pipeline_factory.cpp
         vulkan/descriptor_sets.cpp

@@ -4,8 +4,6 @@ layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 layout(constant_id = 0) const uint NX = 128u;
 layout(constant_id = 1) const uint NY = 128u;
 
-const float DT = 0.016f;
-
 layout(std430, binding = 0) buffer USrc { float data[]; } uSrc;
 layout(std430, binding = 1) buffer VSrc { float data[]; } vSrc;
 layout(std430, binding = 2) buffer DivSrc { float data[]; } divSrc;
@@ -17,7 +15,7 @@ layout(std430, binding = 6) buffer RightB  { uint data[]; } right;
 layout(std430, binding = 7) buffer BottomB { uint data[]; } bottom;
 layout(std430, binding = 8) buffer TopB    { uint data[]; } top;
 
-layout(push_constant) uniform Params { float alpha; float beta; } pc;
+layout(push_constant) uniform Params { float alpha; float beta; float dt; } pc;
 
 // ---------- 边界值（压力 BC） ----------
 float border_pressure(float pi, int edge, int ci, int cj) {
@@ -54,7 +52,7 @@ float border_pressure(float pi, int edge, int ci, int cj) {
             float ubc_n = (edge <= 1) ? bc_u : bc_v;
             float u_face = 0.5 * ((2.0 * ubc_n - un_i) + un_i);
             float dx = 1.0f / float(NX);
-            return pi + (u_face - ubc_n) * (dx / DT);
+            return pi + (u_face - ubc_n) * (dx  / pc.dt);
         }
         case 3: // Pressure: Dirichlet p=0 -> ghost = -pi
             return -pi;

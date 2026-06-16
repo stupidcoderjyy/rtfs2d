@@ -14,14 +14,14 @@ class SwapchainContext;
 class ComputeContext;
 class DescriptorSets;
 class CaseData;
+class VisConfig;
 
 class GraphicsContext {
 public:
     GraphicsContext(DeviceManager& dm, SwapchainContext& sc, ComputeContext& cc, DescriptorSets& ds, const CaseData& cd);
     void BeginRenderPass(const vk::raii::CommandBuffer& cb, uint32_t img_idx) const;
     void EndRenderPass(const vk::raii::CommandBuffer& cb, uint32_t img_idx) const;
-    void RecordCommands(const vk::raii::CommandBuffer &cb,
-                        uint32_t gradient_type, uint32_t vis_mode) const;
+    void RecordCommands(const vk::raii::CommandBuffer &cb, VisConfig& vis_config) const;
 private:
     DeviceManager* dm_;
     SwapchainContext* sc_;

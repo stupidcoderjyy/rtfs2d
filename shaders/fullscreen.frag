@@ -7,6 +7,9 @@ layout(constant_id = 1) const uint NY = 128u;
 layout(push_constant) uniform VisParams {
     uint gradientType;
     uint visMode;
+    uint dyeColorLow;
+    uint dyeColorMid;
+    uint dyeColorHigh;
 } vis;
 
 layout(set = 0, binding = 2, std430) buffer ScalarBuffer { float s[]; };
@@ -41,6 +44,12 @@ vec3 CoolWarm(float t) {
     return vec3(red + white, white, blue + white);
 }
 
+vec3 unpackColor(uint c) {
+    return vec3(float((c >> 16) & 0xFFu) / 255.0,
+                float((c >> 8)  & 0xFFu) / 255.0,
+                float( c        & 0xFFu) / 255.0);
+}
+
 void main() {
     uint mi = uint(fragUV.x * float(NX));
     uint mj = uint(fragUV.y * float(NY));
@@ -56,7 +65,7 @@ void main() {
         return;
     }
 
-    if (edge < 0.002) {
+    if (edge < 0.3) {
         outColor = vec4(0.3, 0.6, 1.0, 1.0);
         return;
     }
@@ -73,11 +82,11 @@ void main() {
         }
         outColor = vec4(color, 1.0);
     } else {
+        vec3 color_low  = unpackColor(vis.dyeColorLow);
+        vec3 color_mid  = unpackColor(vis.dyeColorMid);
+        vec3 color_high = unpackColor(vis.dyeColorHigh);
         float dye_val = clamp(d[midx], 0.0, 1.0);
-        vec3 dye_color = mix(
-            vec3(0.01, 0.01, 0.01),
-            mix(vec3(0.05, 1.0, 1.0), vec3(0.2, 0.4, 0.6), dye_val),
-            dye_val);
+        vec3 dye_color = mix(color_low, mix(color_mid, color_high, dye_val), dye_val);
         outColor = vec4(dye_color, 1.0);
     }
 }

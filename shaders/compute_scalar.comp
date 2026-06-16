@@ -12,7 +12,7 @@ layout(std430, binding = 2) buffer ScalarBuffer { float data[]; } scalar;
 layout(std430, binding = 3) buffer PressureBuffer { float data[]; } p;
 layout(std430, binding = 12) buffer MaskBuf { float data[]; } mask;
 
-layout(push_constant) uniform Params { uint mode; } pc;
+layout(push_constant) uniform Params { uint mode; float coeff; } pc;
 
 bool isObstacle(uint ci, uint cj) {
     if (ci >= NX || cj >= NY) return false;
@@ -66,12 +66,12 @@ void main() {
 
     if (pc.mode == 0u) {
         float speed = sqrt(u.data[idx] * u.data[idx] + v.data[idx] * v.data[idx]);
-        scalar.data[idx] = speed;
+        scalar.data[idx] = speed * pc.coeff;
     } else if (pc.mode == 1u) {
-        scalar.data[idx] = p.data[idx] * 100;
+        scalar.data[idx] = p.data[idx] * pc.coeff;
     } else {
         uint i = idx % NX;
         uint j = idx / NX;
-        scalar.data[idx] = abs(computeVorticity(idx, i, j)) * 0.07;
+        scalar.data[idx] = abs(computeVorticity(idx, i, j)) * pc.coeff;
     }
 }

@@ -1,4 +1,4 @@
-//
+﻿//
 // Created by PC on 2026/6/9.
 //
 
@@ -11,19 +11,19 @@
 #include "vulkan/descriptor_sets.h"
 #include "fluid_solvers.h"
 #include "boundary_conditions.h"
+#include "render/vis_config.h"
 
 namespace rtfs2d {
 
 class DeviceManager;
 
-//TODO 这个应当放入配置模块
-enum class VisField { kSpeed = 0, kPressure = 1, kVorticity = 2 };
-enum class VisGradient { kGray = 0, kJet = 1, kCoolWarm = 2 };
-enum class VisMode { kField = 0, kDye = 1 };
-
 class ComputeContext {
 public:
-    explicit ComputeContext(DeviceManager& dm, DescriptorSets& ds, const CaseData& case_data);
+    explicit ComputeContext(
+        DeviceManager& dm,
+        DescriptorSets& ds,
+        const CaseData& case_data,
+        VisConfig& vis_config);
     void UploadCaseData();
     void RecordCommands(const vk::raii::CommandBuffer& cb);
 
@@ -54,27 +54,17 @@ public:
     vk::DeviceSize buf_size() const { return compute_buf_size_; }
     std::shared_ptr<vk::raii::PipelineLayout> pipeline_layout() const { return pipeline_layout_; }
     uint32_t ibm_marker_count() const { return ibm_marker_count_; }
-    VisField vis_field() const { return vis_field_; }
-    VisGradient vis_gradient() const { return vis_gradient_; }
-    VisMode vis_mode() const { return vis_mode_; }
-
-    //setter
-    void set_vis_field(VisField field) { vis_field_ = field; }
-    void set_vis_gradient(VisGradient gradient) { vis_gradient_ = gradient; }
-    void set_vis_mode(VisMode mode) { vis_mode_ = mode; }
 private:
     const CaseData* case_data_;
     DeviceManager* dm_;
     DescriptorSets* ds_;
+    VisConfig* vis_config_;
     std::shared_ptr<vk::raii::PipelineLayout> pipeline_layout_;
     std::unique_ptr<FluidSolvers> fluid_solvers_;
     const int cell_count_;
     const uint32_t poisson_iter_n;
     const vk::DeviceSize compute_buf_size_;
     uint32_t ibm_marker_count_{};
-    VisField vis_field_ = VisField::kVorticity;
-    VisGradient vis_gradient_ = VisGradient::kJet;
-    VisMode vis_mode_ = VisMode::kField;
     bool dye_use_set1_ = false;
     // 是否正在注入染料
     bool dye_injecting_ = false;
