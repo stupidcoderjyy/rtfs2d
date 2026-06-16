@@ -3,14 +3,13 @@
 add_library(${TARGET} STATIC
         fluid_solvers.cpp
         obstacle_geometry.cpp
-        vk_boundary.cpp
-        vk_compute.cpp
-        vk_descriptor.cpp
-        vk_compute.cpp
-        vk_device.cpp
-        vk_graphics.cpp
+        boundary_conditions.cpp
+        compute_context.cpp
+        compute_context.cpp
+        device_manager.cpp
+        graphics_context.cpp
         vk_memory.cpp
-        vk_swapchain.cpp
+        swapchain_context.cpp
         window.cpp
         compute_pipeline_factory.cpp
         buffers.cpp

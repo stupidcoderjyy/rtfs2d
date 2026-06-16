@@ -7,10 +7,10 @@
 #include <string>
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
-#include "vk_swapchain.h"
-#include "vk_device.h"
-#include "vk_compute.h"
-#include "vk_graphics.h"
+#include "swapchain_context.h"
+#include "device_manager.h"
+#include "compute_context.h"
+#include "graphics_context.h"
 
 namespace rtfs2d {
 

@@ -4,8 +4,8 @@
 
 #include <spdlog/spdlog.h>
 
-#include "vk_swapchain.h"
-#include "vk_device.h"
+#include "swapchain_context.h"
+#include "device_manager.h"
 
 namespace rtfs2d {
 

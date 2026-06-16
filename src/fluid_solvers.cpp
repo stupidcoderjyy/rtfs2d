@@ -5,8 +5,8 @@
 #include "fluid_solvers.h"
 
 #include "case_data.h"
-#include "vk_device.h"
-#include "vk_compute.h"
+#include "device_manager.h"
+#include "compute_context.h"
 
 namespace rtfs2d {
 

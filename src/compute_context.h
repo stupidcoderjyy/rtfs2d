@@ -9,10 +9,8 @@
 #include <vulkan/vulkan_raii.hpp>
 
 #include "descriptor_sets.h"
-#include "grid.h"
 #include "fluid_solvers.h"
-#include "vk_boundary.h"
-#include "obstacle_geometry.h"
+#include "boundary_conditions.h"
 
 namespace rtfs2d {
 

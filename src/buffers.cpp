@@ -5,14 +5,14 @@
 #include "buffers.h"
 
 #include "case_data.h"
-#include "vk_device.h"
+#include "device_manager.h"
 #include "grid.h"
 #include "obstacle_geometry.h"
-#include "vk_boundary.h"
+#include "boundary_conditions.h"
 
 namespace rtfs2d {
 
-void buffers::InitBuffers(DeviceManager& dm, const CaseData& case_data) {
+void buffers::InitBuffers(DeviceManager& dm, const boundary_conditions& case_data) {
     auto cell_count = case_data.total_cells();
     auto field_buf_size = cell_count * sizeof(float);
     std::vector host_data(cell_count, 0.0f);

@@ -5,8 +5,6 @@
 #include <vector>
 #include <array>
 
-#include "buffers.h"
-
 namespace rtfs2d {
 
 class DeviceManager;

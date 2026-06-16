@@ -7,7 +7,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "vk_boundary.h"
+#include "boundary_conditions.h"
 
 namespace rtfs2d {
 

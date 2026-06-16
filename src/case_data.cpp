@@ -5,18 +5,18 @@
 #include <spdlog/spdlog.h>
 
 #include "obstacle_geometry.h"
-#include "vk_boundary.h"
+#include "boundary_conditions.h"
 #include "compile/compiler_input.h"
 #include "obstacle_exp_parser.h"
 
 namespace rtfs2d {
 
-CaseData::CaseData(std::string name): name_(std::move(name)), width_(), height_(), nx_(), ny_(), dx_(), dy_(), total_cells_() {
+boundary_conditions::boundary_conditions(std::string name): name_(std::move(name)), width_(), height_(), nx_(), ny_(), dx_(), dy_(), total_cells_() {
     boundary_ctx_ = std::make_unique<BoundaryConditions>();
     geometry_ = std::make_unique<ObstacleGeometry>();
 }
 
-void CaseData::ParseJson(const nlohmann::json& json) {
+void boundary_conditions::ParseJson(const nlohmann::json& json) {
     if (!json.is_object()) {
         throw std::runtime_error("JSON root must be an object");
     }
@@ -31,7 +31,7 @@ void CaseData::ParseJson(const nlohmann::json& json) {
     LogCase();
 }
 
-void CaseData::ParseGridParams(const nlohmann::json& json) {
+void boundary_conditions::ParseGridParams(const nlohmann::json& json) {
     if (auto it = json.find("mesh_resolution"); it != json.end() && it->is_array() && it->size() == 2) {
         nx_ = (*it)[0].get<int>();
         ny_ = (*it)[1].get<int>();
@@ -52,7 +52,7 @@ void CaseData::ParseGridParams(const nlohmann::json& json) {
     total_cells_ = nx_ * ny_;
 }
 
-void CaseData::ParseGeometry(const nlohmann::json& json) const {
+void boundary_conditions::ParseGeometry(const nlohmann::json& json) const {
     auto it = json.find("geometry");
     if (it == json.end() || !it->is_array()) {
         return;
@@ -82,7 +82,7 @@ static BoundaryType ParseType(const std::string& s) {
     throw std::runtime_error("Unknown boundary type: " + s);
 }
 
-void CaseData::ParseBoundarySide(const std::string& dir_name, BoundaryDirection dir, const nlohmann::json& side_array) const {
+void boundary_conditions::ParseBoundarySide(const std::string& dir_name, BoundaryDirection dir, const nlohmann::json& side_array) const {
     if (!side_array.is_array()) {
         throw std::runtime_error("Boundary condition must be an array");
     }
@@ -121,7 +121,7 @@ void CaseData::ParseBoundarySide(const std::string& dir_name, BoundaryDirection 
     }
 }
 
-void CaseData::ParseBoundary(const nlohmann::json& json) const {
+void boundary_conditions::ParseBoundary(const nlohmann::json& json) const {
     auto it = json.find("boundary_conditions");
     if (it == json.end() || !it->is_object()) {
         return;
@@ -142,7 +142,7 @@ void CaseData::ParseBoundary(const nlohmann::json& json) const {
     }
 }
 
-void CaseData::LogCase() const {
+void boundary_conditions::LogCase() const {
     std::ostringstream oss;
     oss << "Case Loaded\n";
     oss << "Field info:\n";

@@ -2,7 +2,7 @@
 // Created by PC on 2026/6/9.
 //
 
-#include "vk_graphics.h"
+#include "graphics_context.h"
 
 #include <array>
 #include <fstream>
@@ -10,9 +10,9 @@
 #include <vector>
 
 #include "descriptor_sets.h"
-#include "vk_device.h"
-#include "vk_swapchain.h"
-#include "vk_compute.h"
+#include "device_manager.h"
+#include "swapchain_context.h"
+#include "compute_context.h"
 #include "case_data.h"
 
 namespace rtfs2d {

@@ -2,7 +2,7 @@
 // Created by PC on 2026/6/9.
 //
 
-#include "vk_compute.h"
+#include "compute_context.h"
 
 #include <spdlog/spdlog.h>
 #include <vector>
@@ -10,7 +10,7 @@
 #include "case_data.h"
 #include "descriptor_sets.h"
 #include "vk_descriptor.h"
-#include "vk_device.h"
+#include "device_manager.h"
 #include "vk_memory.h"
 
 namespace rtfs2d {

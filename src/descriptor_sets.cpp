@@ -3,7 +3,7 @@
 //
 
 #include "descriptor_sets.h"
-#include "vk_device.h"
+#include "device_manager.h"
 #include "buffers.h"
 
 namespace rtfs2d {

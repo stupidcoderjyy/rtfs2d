@@ -2,10 +2,10 @@
 // Created by PC on 2026/6/11.
 //
 
-#include "vk_boundary.h"
+#include "boundary_conditions.h"
 
 #include "case_data.h"
-#include "vk_device.h"
+#include "device_manager.h"
 
 namespace rtfs2d {
 
