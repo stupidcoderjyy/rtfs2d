@@ -16,6 +16,7 @@ add_library(${TARGET} STATIC
         buffers.cpp
         descriptor_sets.cpp
         case_data.cpp
+        obstacle_exp_parser.cpp
         util/string_input.cpp
         util/string_byte_reader.cpp
         util/buffered_input.cpp
@@ -23,7 +24,6 @@ add_library(${TARGET} STATIC
         compile/compiler_input.cpp
         compile/compile_error.cpp
         compile/compiler.cpp
-        compile/obstacle_exp_parser.cpp
 )
 add_library(rtfs2d::core ALIAS ${TARGET})
 target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

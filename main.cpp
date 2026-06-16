@@ -6,7 +6,7 @@
 #include "case_data.h"
 
 int main(int argc, char* argv[]) {
-    spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
+    spdlog::set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
     spdlog::set_level(spdlog::level::debug);
 
     if (argc < 2) {

@@ -4,7 +4,7 @@
 
 #ifndef RTFS2D_OBSTACLE_EXP_PARSER_H
 #define RTFS2D_OBSTACLE_EXP_PARSER_H
-#include "compiler.h"
+#include "compile/compiler.h"
 
 namespace rtfs2d {
 

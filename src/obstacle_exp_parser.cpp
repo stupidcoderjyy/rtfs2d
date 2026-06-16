@@ -4,9 +4,9 @@
 
 #include "obstacle_exp_parser.h"
 
-#include <math.h>
+#include <cmath>
 
-#include "compiler_input.h"
+#include "compile/compiler_input.h"
 #include "obstacle_geometry.h"
 
 namespace rtfs2d {

@@ -7,7 +7,7 @@
 #include "obstacle_geometry.h"
 #include "vk_boundary.h"
 #include "compile/compiler_input.h"
-#include "compile/obstacle_exp_parser.h"
+#include "obstacle_exp_parser.h"
 
 namespace rtfs2d {
 

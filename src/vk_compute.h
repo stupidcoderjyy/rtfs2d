@@ -68,7 +68,6 @@ private:
     const CaseData* case_data_;
     DeviceManager* dm_;
     DescriptorSets* ds_;
-    // v0, v1, v2, v3, v4, v5, bc1, bc2, bc3, bc4, poly, marker, force, mask
     std::shared_ptr<vk::raii::PipelineLayout> pipeline_layout_;
     std::unique_ptr<FluidSolvers> fluid_solvers_;
     const int cell_count_;
