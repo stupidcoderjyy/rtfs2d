@@ -22,8 +22,8 @@ public:
 
     struct Obstacle {
         uint32_t vert_count{};
-        alignas(8) std::array<float, 4> aabb;   // std430 规定vec2为8字节对齐
-        std::array<PolyVert, kMaxPolyVerts> poly_verts;
+        alignas(8) std::array<float, 4> aabb{};   // std430 规定vec2为8字节对齐
+        std::array<PolyVert, kMaxPolyVerts> poly_verts{};
         void ComputeAABB();
     };
 
@@ -41,7 +41,7 @@ public:
 
     struct MarkerSSBO {
         uint32_t count{};
-        std::array<Marker, kMaxMarkers> markers;
+        std::array<Marker, kMaxMarkers> markers{};
     };
 
     static constexpr uint32_t kMarkBufferSize = sizeof(MarkerSSBO);

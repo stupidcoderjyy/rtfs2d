@@ -25,12 +25,17 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 # 构建后复制示例 JSON 到二进制目录
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_SOURCE_DIR}/examples/test.json"
-        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/test.json"
-    COMMENT "Copying test.json to binary directory"
-)
+file(GLOB JSON_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/examples/*.json")
+
+foreach(json_file ${JSON_FILES})
+    get_filename_component(file_name ${json_file} NAME)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${json_file}
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${file_name}"
+            COMMENT "Copying ${file_name}..."
+    )
+endforeach()
 
 # 启动参数（支持 CLion / VS 调试器）
 set_target_properties(${PROJECT_NAME} PROPERTIES

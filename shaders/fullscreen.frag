@@ -65,7 +65,7 @@ void main() {
         return;
     }
 
-    if (edge < 0.3) {
+    if (edge < 0.003) {
         outColor = vec4(0.3, 0.6, 1.0, 1.0);
         return;
     }

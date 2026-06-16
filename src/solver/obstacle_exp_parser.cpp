@@ -226,7 +226,7 @@ void PropertyRoot::Reduce0(PropertyObs& p0) {
 void PropertyRoot::AddPoints(FunctionType type, const std::vector<float> &args) {
     if (type == kCircle) {
         if (args.size() == 3) {
-            AddCircle(args[0], args[1], args[2], M_PI / 12);
+            AddCircle(args[0], args[1], args[2], 10);
         } else if (args.size() == 4) {
             AddCircle(args[0], args[1], args[2], args[3]);
         } else {
@@ -246,7 +246,7 @@ void PropertyRoot::AddPoints(FunctionType type, const std::vector<float> &args) 
 }
 
 void PropertyRoot::AddCircle(float x0, float y0, float r, float step) {
-    step /= 180.0f;
+    step *= M_PI / 180.0f;
     float rad = 0;
     while (rad < 2 * M_PI) {
         float x = x0 + r * std::cos(rad);

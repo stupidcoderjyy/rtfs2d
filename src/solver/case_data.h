@@ -46,7 +46,6 @@ private:
     void ParseGeometry(const nlohmann::json& json) const;
     void ParseBoundarySide( BoundaryDirection dir, const nlohmann::json &side_array) const;
     void ParseBoundary(const nlohmann::json& json) const;
-    void ParseVisual(const nlohmann::json& json);
 
     void LogCase() const;
 };

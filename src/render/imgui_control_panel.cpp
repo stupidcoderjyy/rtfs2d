@@ -14,6 +14,15 @@ ImGuiControlPanel::ImGuiControlPanel(VisConfig& config) : config_(&config) {}
 void ImGuiControlPanel::Render() const {
     ImGui::Begin("Control Panel", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 
+    // ---- Pause / Reset (公共) ----
+    if (ImGui::Button(config_->paused ? "Resume" : "Pause")) {
+        config_->paused = !config_->paused;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Reset")) {
+        config_->Reset();
+    }
+
     // ---- 时间步长 (两种模式共享) ----
     ImGui::SliderFloat("Time Step", &config_->time_step, 0.001f, 0.05f, "%.4f");
 
@@ -51,7 +60,7 @@ void ImGuiControlPanel::RenderFieldControls() const {
         config_->vis_field = static_cast<VisField>(field_idx);
     }
 
-    // 系数滑条 —— 根据当前 vis_field 选择对应字段和区间
+    // 系数滑条
     ImGui::SliderFloat("Coefficient",
         &config_->CurrentFieldCoeff(),
         0.0f,
@@ -62,7 +71,6 @@ void ImGuiControlPanel::RenderDyeControls() const {
     // 墨迹半径滑条
     ImGui::SliderFloat("Ink Radius", &config_->dye_radius, 0.005f, 0.1f, "%.3f");
 
-    // 辅助 lambda：uint32_t (0xRRGGBB) <-> float[3]
     auto unpack = [](uint32_t c, float col[3]) {
         col[0] = static_cast<float>((c >> 16) & 0xFFu) / 255.0f;
         col[1] = static_cast<float>((c >> 8)  & 0xFFu) / 255.0f;
