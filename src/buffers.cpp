@@ -3,6 +3,8 @@
 //
 
 #include "buffers.h"
+
+#include "case_data.h"
 #include "vk_device.h"
 #include "grid.h"
 #include "obstacle_geometry.h"
@@ -10,9 +12,9 @@
 
 namespace rtfs2d {
 
-void buffers::InitBuffers(DeviceManager& dm, const GridParams& params) {
-    auto cell_count = params.TotalCells();
-    auto field_buf_size = params.TotalCells() * sizeof(float);
+void buffers::InitBuffers(DeviceManager& dm, const CaseData& case_data) {
+    auto cell_count = case_data.total_cells();
+    auto field_buf_size = cell_count * sizeof(float);
     std::vector host_data(cell_count, 0.0f);
     auto usage = vk::BufferUsageFlagBits::eStorageBuffer
         | vk::BufferUsageFlagBits::eTransferSrc
@@ -25,8 +27,8 @@ void buffers::InitBuffers(DeviceManager& dm, const GridParams& params) {
     // 边界条件
     usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
     prop = vk::MemoryPropertyFlagBits::eDeviceLocal;
-    uint32_t h_buf_size_ = params.nx * BoundaryContext::kBufferUnitSize;
-    uint32_t v_buf_size_ = params.ny * BoundaryContext::kBufferUnitSize;
+    uint32_t h_buf_size_ = case_data.nx() * BoundaryConditions::kBufferUnitSize;
+    uint32_t v_buf_size_ = case_data.ny() * BoundaryConditions::kBufferUnitSize;
     for (int i = kBufBc0; i <= kBufBc3; ++i) {
         auto buf_size = i < kBufBc2 ? v_buf_size_ : h_buf_size_;
         dm.CreateBuffer(i, buf_size, usage, prop);

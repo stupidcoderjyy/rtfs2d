@@ -13,10 +13,11 @@ class DeviceManager;
 class SwapchainContext;
 class ComputeContext;
 class DescriptorSets;
+class CaseData;
 
 class GraphicsContext {
 public:
-    GraphicsContext(DeviceManager& dm, SwapchainContext& sc, ComputeContext& cc, DescriptorSets& ds);
+    GraphicsContext(DeviceManager& dm, SwapchainContext& sc, ComputeContext& cc, DescriptorSets& ds, const CaseData& cd);
     void RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t img_idx,
         uint32_t gradient_type, uint32_t vis_mode) const;
 
@@ -25,6 +26,7 @@ private:
     SwapchainContext* sc_;
     ComputeContext* cc_;
     DescriptorSets* ds_;
+    const CaseData* case_data_;
     std::unique_ptr<vk::raii::PipelineLayout> graphics_pipeline_layout_;
     std::unique_ptr<vk::raii::Pipeline> graphics_pipeline_;
 

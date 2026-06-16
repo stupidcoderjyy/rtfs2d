@@ -4,33 +4,28 @@
 
 #include "vk_boundary.h"
 
-#include <ranges>
-#include "grid.h"
+#include "case_data.h"
 #include "vk_device.h"
 
 namespace rtfs2d {
 
-BoundaryContext::BoundaryContext(DeviceManager& dm, const GridParams& gp) :
-        dm_(&dm), grid_params_(gp) {
-    h_cell_count_ = grid_params_.nx - 2;
-    v_cell_count_ = grid_params_.ny - 2;
-    h_buf_size_ = h_cell_count_ * kBufferUnitSize;
-    v_buf_size_ = v_cell_count_ * kBufferUnitSize;
-}
-
-void BoundaryContext::SetBoundary(BoundaryDirection dir, BoundaryType type,
+void BoundaryConditions::SetBoundary(BoundaryDirection dir, BoundaryType type,
         float begin, float end, float u, float v) {
     int idx = static_cast<int>(dir);
     segments_[idx].push_back({begin, end, type, u, v});
 }
 
-void BoundaryContext::BeginSetBoundary() {
+void BoundaryConditions::Reset() {
     for (auto& seg_vec : segments_) {
         seg_vec.clear();
     }
 }
 
-void BoundaryContext::EndSetBoundary() const {
+void BoundaryConditions::UploadData(const CaseData& cd, DeviceManager& dm) const {
+    uint32_t h_cell_count_ = cd.nx() - 2;
+    uint32_t v_cell_count_ = cd.ny() - 2;
+    uint32_t h_buf_size_ = h_cell_count_ * kBufferUnitSize;
+    uint32_t v_buf_size_ = v_cell_count_ * kBufferUnitSize;
     for (int d = 0; d < 4; ++d) {
         uint32_t cell_count = d <= 1 ? v_cell_count_ : h_cell_count_;
         uint32_t buf_size = d <= 1 ? v_buf_size_ : h_buf_size_;
@@ -50,7 +45,7 @@ void BoundaryContext::EndSetBoundary() const {
                 off += kBufferUnitSize;
             }
         }
-        dm_->InitBuffer(buffers::kBufBc0 + d, bytes);
+        dm.InitBuffer(buffers::kBufBc0 + d, bytes);
     }
 }
 

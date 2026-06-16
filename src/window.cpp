@@ -9,21 +9,17 @@
 #include <vector>
 
 #include "window.h"
+
+#include "case_data.h"
 #include "descriptor_sets.h"
 
 namespace rtfs2d {
 
-Window::Window(std::string title, bool debug_enabled):
-        width_(), height_(), title_(std::move(title)), debug_enabled_(debug_enabled) {}
+Window::Window(std::unique_ptr<CaseData> case_data, bool debug_enabled):
+        width_(), height_(), case_data_(std::move(case_data)), debug_enabled_(debug_enabled) {}
 
 void Window::Show() {
     try {
-        // Stage 1 加载流场配置
-        GridParams params{3.0f, 1.0f, 1536, 512};
-        width_ = params.nx;
-        height_ = params.ny;
-
-        // Stage 2
         if (!glfwInit()) {
             throw std::runtime_error("Failed to initialize GLFW");
         }
@@ -31,14 +27,20 @@ void Window::Show() {
             glfwTerminate();
         });
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        window_ = glfwCreateWindow(width_, height_, title_.c_str(), nullptr, nullptr);
+        std::string title = "rtfs2d" + case_data_->name();
+        width_ = case_data_->nx();
+        height_ = case_data_->ny();
+        window_ = glfwCreateWindow(width_, height_, title.c_str(), nullptr, nullptr);
         device_manager_ = std::make_unique<DeviceManager>(window_, debug_enabled_);
         swapchain_ctx_ = std::make_unique<SwapchainContext>(*device_manager_, width_, height_);
-        buffers::InitBuffers(*device_manager_, params);
+        buffers::InitBuffers(*device_manager_, *case_data_);
         DescriptorSets descriptor_sets(*device_manager_);
-        compute_ctx_ = std::make_unique<ComputeContext>(*device_manager_, descriptor_sets, params);
+        compute_ctx_ = std::make_unique<ComputeContext>(*device_manager_, descriptor_sets, *case_data_);
         graphics_ctx_ = std::make_unique<GraphicsContext>(*device_manager_, *swapchain_ctx_,
-            *compute_ctx_, descriptor_sets);
+            *compute_ctx_, descriptor_sets, *case_data_);
+
+        //上传流程数据
+        compute_ctx_->UploadCaseData();
 
         glfwSetWindowUserPointer(window_, this);
         glfwSetMouseButtonCallback(window_, MouseButtonCallback);

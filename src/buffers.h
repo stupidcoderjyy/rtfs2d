@@ -8,7 +8,7 @@
 namespace rtfs2d {
 
 class DeviceManager;
-struct GridParams;
+class CaseData;
 
 namespace buffers {
 
@@ -28,7 +28,7 @@ namespace buffers {
     constexpr int kBufIbmForce = 0x22;
     constexpr int kBufIbmMask = 0x23;
 
-    void InitBuffers(DeviceManager& dm, const GridParams& params);
+    void InitBuffers(DeviceManager& dm, const CaseData& case_data);
 
 };
 

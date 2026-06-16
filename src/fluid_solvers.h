@@ -13,10 +13,11 @@ namespace rtfs2d {
 
 class DeviceManager;
 class ComputeContext;
+class CaseData;
 
 class FluidSolvers {
 public:
-    FluidSolvers(DeviceManager& dm, ComputeContext& cc, DescriptorSets& ds);
+    FluidSolvers(DeviceManager &dm, ComputeContext& cc, const CaseData& case_data, DescriptorSets& ds);
 
     ComputeShaderTask& task_advection() const { return *task_advection_; }
     ComputeShaderTask& task_divergence() const { return *task_divergence_; }

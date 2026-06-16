@@ -7,6 +7,7 @@
 #include <spdlog/spdlog.h>
 #include <vector>
 
+#include "case_data.h"
 #include "descriptor_sets.h"
 #include "vk_descriptor.h"
 #include "vk_device.h"
@@ -14,23 +15,20 @@
 
 namespace rtfs2d {
 
-ComputeContext::ComputeContext(DeviceManager& dm, DescriptorSets& ds, const GridParams& params):
-        dm_(&dm), grid_params_(params), ds_(&ds),
-        cell_count_(params.TotalCells()),
+ComputeContext::ComputeContext(DeviceManager& dm, DescriptorSets& ds, const CaseData& case_data):
+        dm_(&dm), case_data_(&case_data), ds_(&ds),
+        cell_count_(case_data.total_cells()),
         compute_buf_size_(cell_count_ * sizeof(float)),
         poisson_iter_n(std::clamp(
-            static_cast<uint32_t>(std::ceil(50 * (0.00195f * grid_params_.dx))),
+            static_cast<uint32_t>(std::ceil(50 * (0.00195f * case_data.dx()))),
             1u, 100u)) {
-    boundary_ctx_ = std::make_unique<BoundaryContext>(dm, params);
+    fluid_solvers_ = std::make_unique<FluidSolvers>(dm, *this, case_data, ds);
+}
+
+void ComputeContext::UploadCaseData() {
     InitializeVortexField();
-    fluid_solvers_ = std::make_unique<FluidSolvers>(dm, *this, ds);
-    boundary_ctx_->BeginSetBoundary();
-    boundary_ctx_->SetBoundary(BoundaryDirection::kLeft, BoundaryType::kVelocity,
-        0, 1, 0.7f);
-    boundary_ctx_->SetBoundary(BoundaryDirection::kRight, BoundaryType::kPressure,
-        0,1);
-    boundary_ctx_->EndSetBoundary();
-    AddDebugGeometry();
+    case_data_->boundary().UploadData(*case_data_, *dm_);
+    UploadObstacles();
 }
 
 void ComputeContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
@@ -85,7 +83,7 @@ void ComputeContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
 
     // 扩散迭代（u 和 v 各做一次雅可比迭代）
     float viscosity = 0.8f;
-    float dx = grid_params_.dx;
+    float dx = case_data_->dx();
     float alpha = viscosity * 0.016f / (dx * dx);
     float beta = 4.0f + alpha;
     // 必须是奇数次迭代，否则无法把u、v换到前两个缓冲中
@@ -208,10 +206,11 @@ void ComputeContext::InitializeVortexField() const {
     dm_->UploadDeviceBufferData(v_data, dm_->BufferAt(buffers::kBufV1));
 }
 
-void ComputeContext::UploadObstacles(const ObstacleGeometry &geom) {
-    dm_->InitBuffer(buffers::kBufIbmPolygon, geom.SerializePolygonSSBO());
-    dm_->InitBuffer(buffers::kBufIbmMarker, geom.SerializeMarkerSSBO());
-    ibm_marker_count_ = geom.MarksCount();
+void ComputeContext::UploadObstacles() {
+    case_data_->geometry().GenerateIBMMarkers(case_data_->dx());
+    dm_->InitBuffer(buffers::kBufIbmPolygon, case_data_->geometry().SerializePolygonSSBO());
+    dm_->InitBuffer(buffers::kBufIbmMarker, case_data_->geometry().SerializeMarkerSSBO());
+    ibm_marker_count_ = case_data_->geometry().MarksCount();
 
     // 预计算障碍掩码
     vk::CommandBufferAllocateInfo ai{};
@@ -230,6 +229,7 @@ void ComputeContext::UploadObstacles(const ObstacleGeometry &geom) {
     si.setCommandBuffers(*cb);
     queue.submit(si);
     queue.waitIdle();
+    spdlog::info("Obstacles uploaded: {} markers", ibm_marker_count_);
 }
 
 void ComputeContext::DebugReadBackBuffer(const vk::raii::Buffer &buf,
@@ -290,8 +290,8 @@ void ComputeContext::DebugReadBackVelocityBuffer(
     DebugReadBackBuffer(dm_->BufferAt(buffer), compute_buf_size_, [&log_prefix, this](auto* p, auto) {
         auto* ptr = static_cast<float*>(p);
         std::string msg = log_prefix + ": \n";
-        for (int i = 0; i < grid_params_.ny; ++i) {
-            for (int j = 0; j < grid_params_.nx; j++) {
+        for (int i = 0; i < case_data_->ny(); ++i) {
+            for (int j = 0; j < case_data_->nx(); j++) {
                 msg += std::to_string(*ptr++);
                 msg += ", ";
             }
@@ -348,27 +348,6 @@ void ComputeContext::DebugReadBackBoundaryBuffer(int buffer) const {
         }
         spdlog::debug(msg);
     });
-}
-
-void ComputeContext::AddDebugGeometry() {
-    ObstacleGeometry geom;
-    std::vector<std::array<float,2>> points;
-    // for (float rad = 0; rad < 2 * M_PI; rad += M_PI / 16.0f) {
-    //     float r =  0.05f;
-    //     float y0 = 0.5f;
-    //     float x0 = 0.1f;
-    //     points.push_back({
-    //         x0 + r * std::cos(rad),
-    //         y0 + r * std::sin(rad)
-    //     });
-    // }
-    points.push_back({0.15, 0.45});
-    points.push_back({0.15, 0.55});
-    points.push_back({0.25, 0.55});
-    points.push_back({0.25, 0.45});
-    geom.AddObstacle(points);
-    geom.GenerateIBMMarkers(grid_params_.dx);
-    UploadObstacles(geom);
 }
 
 }  // namespace rtfs2d

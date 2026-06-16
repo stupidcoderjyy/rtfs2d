@@ -4,15 +4,15 @@
 
 #include "fluid_solvers.h"
 
+#include "case_data.h"
 #include "vk_device.h"
 #include "vk_compute.h"
 
 namespace rtfs2d {
 
-FluidSolvers::FluidSolvers(DeviceManager &dm, ComputeContext &cc, DescriptorSets& ds): factory_(dm, cc, ds) {
-    auto& params = cc.grid_params();
-    uint32_t nx = params.nx, ny = params.ny;
-    float inv_dx = 1.0f / params.dx, inv_dy = 1.0f / params.dy;
+FluidSolvers::FluidSolvers(DeviceManager &dm, ComputeContext& cc, const CaseData& case_data, DescriptorSets& ds): factory_(dm, cc, ds) {
+    uint32_t nx = case_data.nx(), ny = case_data.ny();
+    float inv_dx = 1.0f / case_data.dx(), inv_dy = 1.0f / case_data.dy();
     task_advection_ = factory_.Create("shaders/advection.comp.spv")
         .AppendSpecializationConst<uint32_t>({nx, ny})
         .AppendSpecializationConst<float>({inv_dx, inv_dy})
@@ -51,7 +51,7 @@ FluidSolvers::FluidSolvers(DeviceManager &dm, ComputeContext &cc, DescriptorSets
         .Build();
     task_ibm_mask_ = factory_.Create("shaders/ibm_mask.comp.spv")
         .AppendSpecializationConst<uint32_t>({nx, ny})
-        .AppendSpecializationConst<float>({params.dx, params.dy})
+        .AppendSpecializationConst<float>({case_data.dx(), case_data.dy()})
         .Build();
     task_compute_scalar_ = factory_.Create("shaders/compute_scalar.comp.spv")
         .AppendSpecializationConst<uint32_t>({nx, ny})
@@ -67,7 +67,7 @@ FluidSolvers::FluidSolvers(DeviceManager &dm, ComputeContext &cc, DescriptorSets
         .Build();
     task_dye_source_ = factory_.Create("shaders/dye_source.comp.spv")
         .AppendSpecializationConst<uint32_t>({nx, ny})
-        .AppendSpecializationConst<float>({params.dx, params.dy})
+        .AppendSpecializationConst<float>({case_data.dx(), case_data.dy()})
         .SetPushConstSize(sizeof(float) * 3)
         .Build();
 }

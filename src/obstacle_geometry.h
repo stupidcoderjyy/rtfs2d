@@ -50,6 +50,7 @@ public:
     void AddObstacle(const std::vector<std::array<float,2>>& points);
     void GenerateIBMMarkers(float h);
     void Clear();
+    const PolygonSSBO& polygon_ssbo() const { return polygon_ssbo_; }
     std::vector<uint8_t> SerializePolygonSSBO() const;
     std::vector<uint8_t> SerializeMarkerSSBO() const;
     uint32_t MarksCount() const {

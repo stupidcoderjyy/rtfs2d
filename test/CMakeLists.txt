@@ -4,7 +4,7 @@ include(GoogleTest)
 set(TARGET rtfs2d_test)
 
 add_executable(${TARGET}
-        test_gtest.cpp
+        test_obs_compiler.cpp
 )
 
 target_link_libraries(${TARGET} PRIVATE

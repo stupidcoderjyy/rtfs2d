@@ -16,16 +16,16 @@ namespace rtfs2d {
 
 class Window {
 public:
-    explicit Window(std::string title, bool debug_enabled = true);
+    explicit Window(std::unique_ptr<CaseData> case_data, bool debug_enabled = true);
     void Show();
 private:
     int width_, height_;
-    std::string title_;
     GLFWwindow* window_{};
     std::unique_ptr<DeviceManager> device_manager_;
     std::unique_ptr<SwapchainContext> swapchain_ctx_;
     std::unique_ptr<ComputeContext> compute_ctx_;
     std::unique_ptr<GraphicsContext> graphics_ctx_;
+    std::unique_ptr<CaseData> case_data_;
     bool debug_enabled_;
     size_t current_frame_ = 0;
 

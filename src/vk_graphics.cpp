@@ -13,11 +13,12 @@
 #include "vk_device.h"
 #include "vk_swapchain.h"
 #include "vk_compute.h"
+#include "case_data.h"
 
 namespace rtfs2d {
 
-GraphicsContext::GraphicsContext(DeviceManager& dm, SwapchainContext& sc, ComputeContext& cc, DescriptorSets& ds) :
-        dm_(&dm), sc_(&sc), cc_(&cc), ds_(&ds) {
+GraphicsContext::GraphicsContext(DeviceManager& dm, SwapchainContext& sc, ComputeContext& cc, DescriptorSets& ds, const CaseData& cd) :
+        dm_(&dm), sc_(&sc), cc_(&cc), ds_(&ds), case_data_(&cd) {
     CreateGraphicsPipeline();
 }
 
@@ -93,16 +94,14 @@ void GraphicsContext::CreateGraphicsPipeline() {
         .setModule(**vert_shader_module)
         .setPName("main");
 
-
-    const auto& params = cc_->grid_params();
     std::vector<vk::SpecializationMapEntry> mes = {
         {0, 0, sizeof(uint32_t)},   // constant_id 0 -> NX
         {1, sizeof(uint32_t), sizeof(uint32_t)},  // constant_id 1 -> NY
     };
     std::vector<uint8_t> bytes;
     bytes.reserve(2 * sizeof(uint32_t));
-    AppendDataToBytesVec<uint32_t>(bytes, params.nx);
-    AppendDataToBytesVec<uint32_t>(bytes, params.ny);
+    AppendDataToBytesVec<uint32_t>(bytes, case_data_->nx());
+    AppendDataToBytesVec<uint32_t>(bytes, case_data_->ny());
 
     vk::SpecializationInfo specInfo{};
     specInfo.setMapEntries(mes)

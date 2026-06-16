@@ -10,7 +10,7 @@
 namespace rtfs2d {
 
 class DeviceManager;
-struct GridParams;
+class CaseData;
 
 enum class BoundaryDirection : uint32_t {
     kLeft = 0,
@@ -34,22 +34,21 @@ struct BoundarySegment {
     float v;
 };
 
-class BoundaryContext {
+class BoundaryConditions {
 public:
-    BoundaryContext(DeviceManager& dm, const GridParams& gp);
+    BoundaryConditions() = default;
     void SetBoundary(BoundaryDirection dir, BoundaryType type,
         float begin = 0.0f, float end = 1.0f, float u = 0.0f, float v = 0.0f);
-    void BeginSetBoundary();
-    void EndSetBoundary() const;
+    void Reset();
+    void UploadData(const CaseData& cd, DeviceManager& dm) const;
+
+    const std::array<std::vector<BoundarySegment>, 4>& segments() const {
+        return segments_;
+    }
 
     // 存储边界条件的信息，每个数据单元包括 int8 + float + float
     static constexpr uint32_t kBufferUnitSize = sizeof(uint32_t) + sizeof(float) * 2;
 private:
-    DeviceManager* dm_;
-    const GridParams& grid_params_;
-    uint32_t h_cell_count_, v_cell_count_;
-    uint32_t h_buf_size_, v_buf_size_;
-
     std::array<std::vector<BoundarySegment>, 4> segments_{};
 };
 

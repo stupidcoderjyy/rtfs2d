@@ -25,7 +25,8 @@ enum class VisMode { kField = 0, kDye = 1 };
 
 class ComputeContext {
 public:
-    explicit ComputeContext(DeviceManager& dm, DescriptorSets& ds, const GridParams& params);
+    explicit ComputeContext(DeviceManager& dm, DescriptorSets& ds, const CaseData& case_data);
+    void UploadCaseData();
     void RecordCommands(const vk::raii::CommandBuffer& cb);
 
     void EnsureBufferReady(
@@ -51,11 +52,9 @@ public:
         dye_injecting_ = injecting;
     }
 
-    const GridParams& grid_params() const { return grid_params_; }
     int cell_count() const { return cell_count_; }
     vk::DeviceSize buf_size() const { return compute_buf_size_; }
     std::shared_ptr<vk::raii::PipelineLayout> pipeline_layout() const { return pipeline_layout_; }
-    BoundaryContext& boundary_ctx() const { return *boundary_ctx_; }
     uint32_t ibm_marker_count() const { return ibm_marker_count_; }
     VisField vis_field() const { return vis_field_; }
     VisGradient vis_gradient() const { return vis_gradient_; }
@@ -66,16 +65,15 @@ public:
     void set_vis_gradient(VisGradient gradient) { vis_gradient_ = gradient; }
     void set_vis_mode(VisMode mode) { vis_mode_ = mode; }
 private:
+    const CaseData* case_data_;
     DeviceManager* dm_;
     DescriptorSets* ds_;
     // v0, v1, v2, v3, v4, v5, bc1, bc2, bc3, bc4, poly, marker, force, mask
     std::shared_ptr<vk::raii::PipelineLayout> pipeline_layout_;
     std::unique_ptr<FluidSolvers> fluid_solvers_;
-    GridParams grid_params_;
     const int cell_count_;
     const uint32_t poisson_iter_n;
     const vk::DeviceSize compute_buf_size_;
-    std::unique_ptr<BoundaryContext> boundary_ctx_;
     uint32_t ibm_marker_count_{};
     VisField vis_field_ = VisField::kVorticity;
     VisGradient vis_gradient_ = VisGradient::kJet;
@@ -87,7 +85,7 @@ private:
     float dye_x_{}, dye_y_{};
 
     void InitializeVortexField() const; // 初始化流场为涡旋场
-    void UploadObstacles(const ObstacleGeometry& geom);
+    void UploadObstacles();
 
     void DebugReadBackBuffer(const vk::raii::Buffer& buf, uint32_t size,
         const std::function<void(void* buf, uint32_t len)>& handler) const;
@@ -96,7 +94,6 @@ private:
     void DebugReadBackVelocityBufferPoints(const vk::raii::CommandBuffer &cb,
         int buffer, const std::string &log_prefix, const std::vector<int> &indexes) const;
     void DebugReadBackBoundaryBuffer(int buffer) const;
-    void AddDebugGeometry();
 };
 
 }  // namespace rtfs2d
