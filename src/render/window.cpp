@@ -44,7 +44,7 @@ void Window::Show() {
         imgui_ctx_ = std::make_unique<ImGuiVulkanContext>(window_,
             *device_manager_, *swapchain_ctx_->render_pass(),
             swapchain_ctx_->swapchain_images().size());
-        ImGuiControlPanel imgui_control(vis_config_);
+        ImGuiControlPanel imgui_control(vis_config_, *compute_ctx_);
         //上传流程数据
         compute_ctx_->UploadCaseData();
 
@@ -92,9 +92,7 @@ void Window::Show() {
             cb.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
             // 完成并验证着色器计算
-            if (!vis_config_.paused) {
-                compute_ctx_->RecordCommands(cb);
-            }
+            compute_ctx_->RecordCommands(cb);
 
             // 尝试从交换链获取一张处于空闲状态图像的所有权
             // 一张图片可能有六个状态：空闲状态 → 被CPU占用 → 处于渲染队列 → 正在渲染 → 处于呈现队列 → 正在呈现

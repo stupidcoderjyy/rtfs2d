@@ -25,7 +25,7 @@ void VisConfig::Reset() {
     dye_colors_[1] = 0x0DFFFF;
     dye_colors_[2] = 0x336699;
     time_step = 0.016f;
-    paused = false;
+    paused = true;
 }
 
 }

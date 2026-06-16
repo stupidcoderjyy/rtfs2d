@@ -30,12 +30,72 @@ ComputeContext::ComputeContext(
 }
 
 void ComputeContext::UploadCaseData() {
-    InitializeVortexField();
+    InitField();
     case_data_->boundary().UploadData(*case_data_, *dm_);
     UploadObstacles();
 }
 
 void ComputeContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
+    if (!vis_config_->paused) {
+        ComputeObstacles(cb);
+        // [0(u_src), 1(v_src), 2(u_dst), 3(v_dst), 4]
+        ComputeFluid(cb);
+    }
+
+    // [0(u), 1(v), 2(div), 3, 4(p)]
+    ComputeRenderData(cb);
+}
+
+void ComputeContext::InitField() const {
+    std::vector u_data(cell_count_, 0.0f);
+    std::vector v_data(cell_count_, 0.0f);
+    dm_->UploadDeviceBufferData(u_data, dm_->BufferAt(buffers::kBufV0));
+    dm_->UploadDeviceBufferData(v_data, dm_->BufferAt(buffers::kBufV1));
+}
+
+void ComputeContext::EnsureBufferReady(
+        vk::PipelineStageFlagBits src_stage,
+        vk::PipelineStageFlagBits dst_stage,
+        const vk::raii::CommandBuffer &cb, int buf) const {
+    vk::BufferMemoryBarrier barrier{};
+    barrier.setSrcAccessMask(vk::AccessFlagBits::eShaderWrite)
+        .setDstAccessMask(vk::AccessFlagBits::eShaderRead)
+        .setBuffer(*dm_->BufferAt(buf))
+        .setSize(dm_->BufferSize(buf))
+        .setOffset(0)
+        .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+        .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
+    cb.pipelineBarrier(src_stage, dst_stage,
+        {}, nullptr, {barrier}, nullptr);
+}
+
+void ComputeContext::UploadObstacles() {
+    case_data_->geometry().GenerateIBMMarkers(case_data_->dx());
+    dm_->InitBuffer(buffers::kBufIbmPolygon, case_data_->geometry().SerializePolygonSSBO());
+    dm_->InitBuffer(buffers::kBufIbmMarker, case_data_->geometry().SerializeMarkerSSBO());
+    ibm_marker_count_ = case_data_->geometry().MarksCount();
+
+    // 预计算障碍掩码
+    vk::CommandBufferAllocateInfo ai{};
+    ai.setCommandPool(dm_->command_pool())
+        .setCommandBufferCount(1)
+        .setLevel(vk::CommandBufferLevel::ePrimary);
+    auto cbs = dm_->device().allocateCommandBuffers(ai);
+    auto& cb = cbs[0];
+    auto queue = dm_->graphics_queue();
+    cb.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+    fluid_solvers_->task_ibm_mask()
+        .Begin(cb, ds_->SetAt(kSetIbmMask)) //描述符集随便选一个即可
+        .End(cell_count_);
+    cb.end();
+    vk::SubmitInfo si{};
+    si.setCommandBuffers(*cb);
+    queue.submit(si);
+    queue.waitIdle();
+    spdlog::info("Obstacles uploaded: {} markers", ibm_marker_count_);
+}
+
+void ComputeContext::ComputeObstacles(const vk::raii::CommandBuffer& cb) const {
     // u, v, markers → markers
     EnsureBufferReadyForCompute(cb, buffers::kBufV0);
     EnsureBufferReadyForCompute(cb, buffers::kBufV1);
@@ -55,7 +115,9 @@ void ComputeContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
     fluid_solvers_->task_ibm_apply_force()
         .Begin(cb, ds_->SetAt(kSetIbmApplyForce))
         .End(cell_count_);
+}
 
+void ComputeContext::ComputeFluid(const vk::raii::CommandBuffer& cb) {
     // 平流
     // [0(u_src), 1(v_src), 2(u_dst), 3(v_dst), 4]
     EnsureBufferReadyForCompute(cb, buffers::kBufV0);
@@ -156,7 +218,9 @@ void ComputeContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
         .PushConstant<float>(vis_config_->time_step)
         .End(cell_count_);
     // [0(u), 1(v), 2(div), 3, 4(p)]
+}
 
+void ComputeContext::ComputeRenderData(const vk::raii::CommandBuffer& cb) const {
     if (vis_config_->vis_mode == VisMode::kDye) {
         auto buf_dye_dst = dye_use_set1_ ? buffers::kBufV5 : buffers::kBufV6;
         EnsureBufferReady(vk::PipelineStageFlagBits::eComputeShader,
@@ -194,58 +258,9 @@ void ComputeContext::RecordCommands(const vk::raii::CommandBuffer& cb) {
     }
 }
 
-void ComputeContext::EnsureBufferReady(
-        vk::PipelineStageFlagBits src_stage,
-        vk::PipelineStageFlagBits dst_stage,
-        const vk::raii::CommandBuffer &cb, int buf) const {
-    vk::BufferMemoryBarrier barrier{};
-    barrier.setSrcAccessMask(vk::AccessFlagBits::eShaderWrite)
-        .setDstAccessMask(vk::AccessFlagBits::eShaderRead)
-        .setBuffer(*dm_->BufferAt(buf))
-        .setSize(dm_->BufferSize(buf))
-        .setOffset(0)
-        .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-        .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED);
-    cb.pipelineBarrier(src_stage, dst_stage,
-        {}, nullptr, {barrier}, nullptr);
-}
-
-void ComputeContext::InitializeVortexField() const {
-    std::vector u_data(cell_count_, 0.0f);
-    std::vector v_data(cell_count_, 0.0f);
-    dm_->UploadDeviceBufferData(u_data, dm_->BufferAt(buffers::kBufV0));
-    dm_->UploadDeviceBufferData(v_data, dm_->BufferAt(buffers::kBufV1));
-}
-
-void ComputeContext::UploadObstacles() {
-    case_data_->geometry().GenerateIBMMarkers(case_data_->dx());
-    dm_->InitBuffer(buffers::kBufIbmPolygon, case_data_->geometry().SerializePolygonSSBO());
-    dm_->InitBuffer(buffers::kBufIbmMarker, case_data_->geometry().SerializeMarkerSSBO());
-    ibm_marker_count_ = case_data_->geometry().MarksCount();
-
-    // 预计算障碍掩码
-    vk::CommandBufferAllocateInfo ai{};
-    ai.setCommandPool(dm_->command_pool())
-        .setCommandBufferCount(1)
-        .setLevel(vk::CommandBufferLevel::ePrimary);
-    auto cbs = dm_->device().allocateCommandBuffers(ai);
-    auto& cb = cbs[0];
-    auto queue = dm_->graphics_queue();
-    cb.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-    fluid_solvers_->task_ibm_mask()
-        .Begin(cb, ds_->SetAt(kSetIbmMask)) //描述符集随便选一个即可
-        .End(cell_count_);
-    cb.end();
-    vk::SubmitInfo si{};
-    si.setCommandBuffers(*cb);
-    queue.submit(si);
-    queue.waitIdle();
-    spdlog::info("Obstacles uploaded: {} markers", ibm_marker_count_);
-}
-
 void ComputeContext::DebugReadBackBuffer(const vk::raii::Buffer &buf,
-        uint32_t size,
-        const std::function<void(void* p, uint32_t len)> &handler) const {
+                                         uint32_t size,
+                                         const std::function<void(void* p, uint32_t len)> &handler) const {
     // 创建 staging buffer
     vk::BufferCreateInfo ci{};
     ci.setSize(size)

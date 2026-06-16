@@ -6,10 +6,12 @@
 
 #include <imgui.h>
 #include "vis_config.h"
+#include "solver/compute_context.h"
 
 namespace rtfs2d {
 
-ImGuiControlPanel::ImGuiControlPanel(VisConfig& config) : config_(&config) {}
+ImGuiControlPanel::ImGuiControlPanel(VisConfig& config, ComputeContext& cc)
+        : config_(&config), cc_(&cc) {}
 
 void ImGuiControlPanel::Render() const {
     ImGui::Begin("Control Panel", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
@@ -21,6 +23,10 @@ void ImGuiControlPanel::Render() const {
     ImGui::SameLine();
     if (ImGui::Button("Reset")) {
         config_->Reset();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Init Field")) {
+        cc_->InitField();
     }
 
     // ---- 时间步长 (两种模式共享) ----

@@ -26,6 +26,7 @@ public:
         VisConfig& vis_config);
     void UploadCaseData();
     void RecordCommands(const vk::raii::CommandBuffer& cb);
+    void InitField() const; // 初始化流场
 
     void EnsureBufferReady(
         vk::PipelineStageFlagBits src_stage,
@@ -70,9 +71,11 @@ private:
     bool dye_injecting_ = false;
     // 染料位置
     float dye_x_{}, dye_y_{};
-
-    void InitializeVortexField() const; // 初始化流场为涡旋场
     void UploadObstacles();
+
+    void ComputeObstacles(const vk::raii::CommandBuffer& cb) const;
+    void ComputeFluid(const vk::raii::CommandBuffer& cb);
+    void ComputeRenderData(const vk::raii::CommandBuffer& cb) const;
 
     void DebugReadBackBuffer(const vk::raii::Buffer& buf, uint32_t size,
         const std::function<void(void* buf, uint32_t len)>& handler) const;
