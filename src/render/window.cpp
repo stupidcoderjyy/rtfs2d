@@ -24,8 +24,8 @@ void Window::Show() {
         if (!glfwInit()) {
             throw std::runtime_error("Failed to initialize GLFW");
         }
-        auto glfw_guard = std::shared_ptr<void>(nullptr, [this](...) {
-            imgui_ctx_->Shutdown();
+        auto glfw_guard = std::shared_ptr<void>(nullptr, [](...) {
+            ImGuiVulkanContext::Shutdown();
             glfwTerminate();
         });
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -116,9 +116,9 @@ void Window::Show() {
             graphics_ctx_->RecordCommands(cb, vis_config_);
 
             // GUI渲染
-            imgui_ctx_->BeginFrame();
+            ImGuiVulkanContext::BeginFrame();
             imgui_control.Render();
-            imgui_ctx_->EndFrame(cb);
+            ImGuiVulkanContext::EndFrame(cb);
 
             // 渲染结束
             graphics_ctx_->EndRenderPass(cb, img_idx);

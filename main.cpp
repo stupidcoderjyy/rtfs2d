@@ -1,6 +1,7 @@
 ﻿#include <spdlog/spdlog.h>
 #include <filesystem>
 #include <fstream>
+#include <string>
 
 #include "solver/case_data.h"
 #include "render/window.h"
@@ -10,11 +11,18 @@ int main(int argc, char* argv[]) {
     spdlog::set_level(spdlog::level::debug);
 
     if (argc < 2) {
-        spdlog::error("Usage: {} <case.json>", argc >= 1 ? argv[0] : "rtfs2d");
+        spdlog::error("Usage: {} <case.json> [--Debug]", argc >= 1 ? argv[0] : "rtfs2d");
         return 1;
     }
 
     const char* json_path = argv[1];
+    bool debug_enabled = false;
+    for (int i = 2; i < argc; ++i) {
+        if (std::string(argv[i]) == "--Debug") {
+            debug_enabled = true;
+            spdlog::set_level(spdlog::level::trace);
+        }
+    }
     spdlog::info("Loading case from: {}", json_path);
 
     auto stem = std::filesystem::path(json_path).stem().string();
@@ -32,7 +40,7 @@ int main(int argc, char* argv[]) {
         spdlog::error("Failed to load case file {}: {}", json_path, e.what());
         return 1;
     }
-    rtfs2d::Window w(std::move(case_data));
+    rtfs2d::Window w(std::move(case_data), debug_enabled);
     w.Show();
     return 0;
 }

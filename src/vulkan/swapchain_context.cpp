@@ -124,10 +124,10 @@ void SwapchainContext::CreateSwapChain(int width, int height, bool replace) {
     ci.setClipped(VK_TRUE);
 
     // 若 graphics 和 present 是同一队列族，使用独占模式；否则使用并发模式
+    uint32_t indices[] = { device_manager_->graphics_queue_family_index(), device_manager_->present_queue_family_index() };
     if (device_manager_->graphics_queue_family_index() == device_manager_->present_queue_family_index()) {
         ci.setImageSharingMode(vk::SharingMode::eExclusive);
     } else {
-        uint32_t indices[] = { device_manager_->graphics_queue_family_index(), device_manager_->present_queue_family_index() };
         ci.setImageSharingMode(vk::SharingMode::eConcurrent).setQueueFamilyIndices(indices);
     }
 
