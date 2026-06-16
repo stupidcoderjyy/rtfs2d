@@ -16,6 +16,7 @@ add_library(${TARGET} STATIC
         descriptor_sets.cpp
         case_data.cpp
         obstacle_exp_parser.cpp
+        imgui_vulkan_context.cpp
         util/string_input.cpp
         util/string_byte_reader.cpp
         util/buffered_input.cpp
@@ -31,4 +32,5 @@ target_link_libraries(${TARGET} PRIVATE
         Vulkan::Vulkan
         spdlog::spdlog
         nlohmann_json::nlohmann_json
+        external::imgui
 )

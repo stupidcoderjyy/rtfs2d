@@ -18,9 +18,10 @@ class CaseData;
 class GraphicsContext {
 public:
     GraphicsContext(DeviceManager& dm, SwapchainContext& sc, ComputeContext& cc, DescriptorSets& ds, const CaseData& cd);
-    void RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t img_idx,
-        uint32_t gradient_type, uint32_t vis_mode) const;
-
+    void BeginRenderPass(const vk::raii::CommandBuffer& cb, uint32_t img_idx) const;
+    void EndRenderPass(const vk::raii::CommandBuffer& cb, uint32_t img_idx) const;
+    void RecordCommands(const vk::raii::CommandBuffer &cb,
+                        uint32_t gradient_type, uint32_t vis_mode) const;
 private:
     DeviceManager* dm_;
     SwapchainContext* sc_;

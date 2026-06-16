@@ -4,13 +4,13 @@
 
 #ifndef RTFS2D_WINDOW_H
 #define RTFS2D_WINDOW_H
-#include <string>
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 #include "swapchain_context.h"
 #include "device_manager.h"
 #include "compute_context.h"
 #include "graphics_context.h"
+#include "imgui_vulkan_context.h"
 
 namespace rtfs2d {
 
@@ -25,6 +25,7 @@ private:
     std::unique_ptr<SwapchainContext> swapchain_ctx_;
     std::unique_ptr<ComputeContext> compute_ctx_;
     std::unique_ptr<GraphicsContext> graphics_ctx_;
+    std::unique_ptr<ImGuiVulkanContext> imgui_ctx_;
     std::unique_ptr<CaseData> case_data_;
     bool debug_enabled_;
     size_t current_frame_ = 0;

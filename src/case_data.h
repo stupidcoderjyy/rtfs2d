@@ -8,11 +8,9 @@
 #include <nlohmann/json.hpp>
 
 #include "boundary_conditions.h"
+#include "obstacle_geometry.h"
 
 namespace rtfs2d {
-
-class ObstacleGeometry;
-class BoundaryConditions;
 
 class CaseData {
 public:
@@ -46,7 +44,7 @@ private:
 
     void ParseGridParams(const nlohmann::json& json);
     void ParseGeometry(const nlohmann::json& json) const;
-    void ParseBoundarySide(const std::string& dir_name, BoundaryDirection dir, const nlohmann::json &side_array) const;
+    void ParseBoundarySide( BoundaryDirection dir, const nlohmann::json &side_array) const;
     void ParseBoundary(const nlohmann::json& json) const;
     void ParseVisual(const nlohmann::json& json);
 

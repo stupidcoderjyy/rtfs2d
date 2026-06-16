@@ -9,9 +9,9 @@
 #include <vector>
 
 #include "window.h"
-
 #include "case_data.h"
 #include "descriptor_sets.h"
+#include "buffers.h"
 
 namespace rtfs2d {
 
@@ -23,7 +23,8 @@ void Window::Show() {
         if (!glfwInit()) {
             throw std::runtime_error("Failed to initialize GLFW");
         }
-        auto glfw_guard = std::shared_ptr<void>(nullptr, [](...) {
+        auto glfw_guard = std::shared_ptr<void>(nullptr, [this](...) {
+            imgui_ctx_->Shutdown();
             glfwTerminate();
         });
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -38,7 +39,9 @@ void Window::Show() {
         compute_ctx_ = std::make_unique<ComputeContext>(*device_manager_, descriptor_sets, *case_data_);
         graphics_ctx_ = std::make_unique<GraphicsContext>(*device_manager_, *swapchain_ctx_,
             *compute_ctx_, descriptor_sets, *case_data_);
-
+        imgui_ctx_ = std::make_unique<ImGuiVulkanContext>(window_,
+            *device_manager_, *swapchain_ctx_->render_pass(),
+            swapchain_ctx_->swapchain_images().size());
         //上传流程数据
         compute_ctx_->UploadCaseData();
 
@@ -101,9 +104,17 @@ void Window::Show() {
                 continue;
             }
 
-            graphics_ctx_->RecordCommands(cb, img_idx,
-                static_cast<uint32_t>(compute_ctx_->vis_gradient()),
+            // 开始渲染
+            graphics_ctx_->BeginRenderPass(cb, img_idx);
+
+            // GUI渲染
+            imgui_ctx_->RecordCommands(cb);
+            // 流场渲染
+            graphics_ctx_->RecordCommands(cb, static_cast<uint32_t>(compute_ctx_->vis_gradient()),
                 static_cast<uint32_t>(compute_ctx_->vis_mode()));
+
+            // 渲染结束
+            graphics_ctx_->EndRenderPass(cb, img_idx);
             cb.end();
 
             // 提交命令缓冲区。GPU会等待，直到图像就绪（acquire_sem被激活），CPU端会立刻返回，并准备下一帧的内容

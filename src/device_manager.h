@@ -57,6 +57,7 @@ public:
     vk::DeviceSize BufferSize(int idx) const {
         return buffer_infos_[idx].size;
     }
+    vk::raii::Instance& vk_instance() const { return *instance_; }
     vk::raii::SurfaceKHR& surface() const { return *surface_; }
     vk::raii::PhysicalDevice& physical_device() { return physical_device_; }
     const vk::raii::Device& device() const { return *device_; }

@@ -22,8 +22,7 @@ GraphicsContext::GraphicsContext(DeviceManager& dm, SwapchainContext& sc, Comput
     CreateGraphicsPipeline();
 }
 
-void GraphicsContext::RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t img_idx,
-        uint32_t gradient_type, uint32_t vis_mode) const {
+void GraphicsContext::BeginRenderPass(const vk::raii::CommandBuffer &cb, uint32_t img_idx) const {
     // 图像布局转换：从旧布局到颜色附件最优布局
     vk::ImageMemoryBarrier barrier{};
     vk::ImageSubresourceRange sr{};
@@ -53,7 +52,16 @@ void GraphicsContext::RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t
         .setClearValueCount(1)
         .setPClearValues(&clear_value);
     cb.beginRenderPass(bi, vk::SubpassContents::eInline);
+}
 
+void GraphicsContext::EndRenderPass(const vk::raii::CommandBuffer &cb, uint32_t img_idx) const {
+    cb.endRenderPass();
+    // 将图像布局转换为呈现源布局
+    sc_->image_layouts()[img_idx] = vk::ImageLayout::ePresentSrcKHR;
+}
+
+void GraphicsContext::RecordCommands(const vk::raii::CommandBuffer &cb,
+        uint32_t gradient_type, uint32_t vis_mode) const {
     // 设置动态视口和剪刀（必须与交换链尺寸一致）
     vk::Viewport viewport(0.0f, 0.0f,
         static_cast<float>(sc_->extent().width),
@@ -76,11 +84,6 @@ void GraphicsContext::RecordCommands(const vk::raii::CommandBuffer& cb, uint32_t
 
     // 绘制全屏三角形（3个顶点）
     cb.draw(3, 1, 0, 0);
-
-    cb.endRenderPass();
-
-    // 将图像布局转换为呈现源布局
-    sc_->image_layouts()[img_idx] = vk::ImageLayout::ePresentSrcKHR;
 }
 
 void GraphicsContext::CreateGraphicsPipeline() {

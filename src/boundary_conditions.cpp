@@ -6,6 +6,7 @@
 
 #include "case_data.h"
 #include "device_manager.h"
+#include "buffers.h"
 
 namespace rtfs2d {
 

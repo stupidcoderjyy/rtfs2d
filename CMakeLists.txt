@@ -37,7 +37,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     VS_DEBUGGER_COMMAND_ARGUMENTS "test.json"
 )
 
-add_subdirectory(thirdparty/googletest)
+add_subdirectory(thirdparty)
 add_subdirectory(src)
 add_subdirectory(test)
 add_subdirectory(shaders)

@@ -9,9 +9,9 @@
 
 #include "case_data.h"
 #include "descriptor_sets.h"
-#include "vk_descriptor.h"
 #include "device_manager.h"
 #include "vk_memory.h"
+#include "buffers.h"
 
 namespace rtfs2d {
 
