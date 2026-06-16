@@ -6,12 +6,11 @@
 #include <spdlog/spdlog.h>
 #include <memory>
 #include <stdexcept>
-#include <vector>
 
 #include "window.h"
-#include "case_data.h"
-#include "descriptor_sets.h"
-#include "buffers.h"
+#include "solver/case_data.h"
+#include "vulkan/descriptor_sets.h"
+#include "vulkan/buffers.h"
 
 namespace rtfs2d {
 

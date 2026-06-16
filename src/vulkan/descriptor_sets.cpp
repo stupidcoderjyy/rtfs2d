@@ -4,7 +4,7 @@
 
 #include "descriptor_sets.h"
 #include "device_manager.h"
-#include "buffers.h"
+#include "vulkan/buffers.h"
 
 namespace rtfs2d {
 

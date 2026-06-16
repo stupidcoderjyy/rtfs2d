@@ -2,12 +2,12 @@
 // Created by PC on 2026/6/15.
 //
 
-#include "buffers.h"
+#include "vulkan/buffers.h"
 
-#include "case_data.h"
+#include "solver/case_data.h"
+#include "solver/obstacle_geometry.h"
+#include "solver/boundary_conditions.h"
 #include "device_manager.h"
-#include "obstacle_geometry.h"
-#include "boundary_conditions.h"
 
 namespace rtfs2d {
 

@@ -8,10 +8,10 @@
 #include <vector>
 
 #include "case_data.h"
-#include "descriptor_sets.h"
-#include "device_manager.h"
-#include "vk_memory.h"
-#include "buffers.h"
+#include "vulkan/descriptor_sets.h"
+#include "vulkan/device_manager.h"
+#include "vulkan/vk_memory.h"
+#include "vulkan/buffers.h"
 
 namespace rtfs2d {
 

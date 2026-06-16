@@ -9,11 +9,11 @@
 #include <spdlog/spdlog.h>
 #include <vector>
 
-#include "descriptor_sets.h"
-#include "device_manager.h"
-#include "swapchain_context.h"
-#include "compute_context.h"
-#include "case_data.h"
+#include "vulkan/descriptor_sets.h"
+#include "vulkan/device_manager.h"
+#include "vulkan/swapchain_context.h"
+#include "solver/compute_context.h"
+#include "solver/case_data.h"
 
 namespace rtfs2d {
 

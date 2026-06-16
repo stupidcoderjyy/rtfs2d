@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "compute_pipeline_factory.h"
+#include "vulkan/compute_pipeline_factory.h"
 
 namespace rtfs2d {
 

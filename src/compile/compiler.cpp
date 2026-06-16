@@ -3,7 +3,6 @@
 //
 
 #include "compiler.h"
-
 #include "compiler_input.h"
 #include "util/abstract_input.h"
 

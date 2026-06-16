@@ -5,8 +5,8 @@
 #include "boundary_conditions.h"
 
 #include "case_data.h"
-#include "device_manager.h"
-#include "buffers.h"
+#include "vulkan/device_manager.h"
+#include "vulkan/buffers.h"
 
 namespace rtfs2d {
 

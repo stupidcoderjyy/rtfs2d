@@ -9,7 +9,7 @@
 #include <vector>
 #include <spdlog/spdlog.h>
 
-#include "vk_memory.h"
+#include "vulkan/vk_memory.h"
 
 namespace rtfs2d {
 

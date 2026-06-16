@@ -8,7 +8,7 @@
 #include <functional>
 #include <vulkan/vulkan_raii.hpp>
 
-#include "descriptor_sets.h"
+#include "vulkan/descriptor_sets.h"
 #include "fluid_solvers.h"
 #include "boundary_conditions.h"
 

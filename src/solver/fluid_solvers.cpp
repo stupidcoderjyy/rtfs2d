@@ -5,8 +5,7 @@
 #include "fluid_solvers.h"
 
 #include "case_data.h"
-#include "device_manager.h"
-#include "compute_context.h"
+#include "vulkan/device_manager.h"
 
 namespace rtfs2d {
 

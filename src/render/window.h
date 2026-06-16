@@ -6,10 +6,10 @@
 #define RTFS2D_WINDOW_H
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
-#include "swapchain_context.h"
-#include "device_manager.h"
-#include "compute_context.h"
-#include "graphics_context.h"
+#include "vulkan/swapchain_context.h"
+#include "vulkan/device_manager.h"
+#include "solver/compute_context.h"
+#include "render/graphics_context.h"
 #include "imgui_vulkan_context.h"
 
 namespace rtfs2d {

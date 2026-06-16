@@ -9,7 +9,7 @@
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
 
-#include "device_manager.h"
+#include "vulkan/device_manager.h"
 
 namespace rtfs2d {
 

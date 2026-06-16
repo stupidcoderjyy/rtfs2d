@@ -4,7 +4,6 @@
 
 #include "compile_error.h"
 
-#include <iostream>
 #include <string>
 #include <spdlog/spdlog.h>
 

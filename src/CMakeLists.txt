@@ -1,22 +1,21 @@
 ﻿set(TARGET rtfs2d_core)
 
 add_library(${TARGET} STATIC
-        fluid_solvers.cpp
-        obstacle_geometry.cpp
-        boundary_conditions.cpp
-        compute_context.cpp
-        compute_context.cpp
-        device_manager.cpp
-        graphics_context.cpp
-        vk_memory.cpp
-        swapchain_context.cpp
-        window.cpp
-        compute_pipeline_factory.cpp
-        buffers.cpp
-        descriptor_sets.cpp
-        case_data.cpp
-        obstacle_exp_parser.cpp
-        imgui_vulkan_context.cpp
+        render/graphics_context.cpp
+        render/imgui_vulkan_context.cpp
+        render/window.cpp
+        vulkan/buffers.cpp
+        vulkan/compute_pipeline_factory.cpp
+        vulkan/descriptor_sets.cpp
+        vulkan/device_manager.cpp
+        vulkan/swapchain_context.cpp
+        vulkan/vk_memory.cpp
+        solver/boundary_conditions.cpp
+        solver/case_data.cpp
+        solver/compute_context.cpp
+        solver/fluid_solvers.cpp
+        solver/obstacle_exp_parser.cpp
+        solver/obstacle_geometry.cpp
         util/string_input.cpp
         util/string_byte_reader.cpp
         util/buffered_input.cpp

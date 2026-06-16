@@ -1,9 +1,9 @@
-﻿#include "window.h"
-#include <spdlog/spdlog.h>
+﻿#include <spdlog/spdlog.h>
 #include <filesystem>
 #include <fstream>
 
-#include "case_data.h"
+#include "solver/case_data.h"
+#include "render/window.h"
 
 int main(int argc, char* argv[]) {
     spdlog::set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");

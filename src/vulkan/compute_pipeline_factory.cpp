@@ -7,7 +7,7 @@
 #include <spdlog/spdlog.h>
 
 #include "descriptor_sets.h"
-#include "compute_context.h"
+#include "solver/compute_context.h"
 #include "device_manager.h"
 
 namespace rtfs2d {
