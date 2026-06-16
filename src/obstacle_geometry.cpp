@@ -40,7 +40,7 @@ void ObstacleGeometry::AddObstacle(const std::vector<std::array<float, 2>>& poin
         spdlog::warn("Obstacle ignored: No polygon points");
         return;
     }
-    Obstacle obs = {};
+    auto& obs = polygon_ssbo_.obstacles[polygon_ssbo_.count++];
     obs.vert_count = 0;
 
     // 复制顶点，最多 kMaxPolyVertexes 个
@@ -55,30 +55,7 @@ void ObstacleGeometry::AddObstacle(const std::vector<std::array<float, 2>>& poin
         obs.poly_verts[i].y = points[i][1];
     }
     obs.vert_count = copy_count;
-
-    // 首尾闭合检测：如果首末点距离大于阈值，则追加首点
-    if (copy_count >= 2) {
-        float x0 = obs.poly_verts[0].x;
-        float y0 = obs.poly_verts[0].y;
-        float xn = obs.poly_verts[copy_count - 1].x;
-        float yn = obs.poly_verts[copy_count - 1].y;
-        float dx = x0 - xn;
-        float dy = y0 - yn;
-        if (float dist = std::sqrt(dx * dx + dy * dy); dist > 1e-6f) {
-            if (copy_count < max_verts) {
-                obs.poly_verts[copy_count].x = x0;
-                obs.poly_verts[copy_count].y = y0;
-                obs.vert_count = copy_count + 1;
-            } else {
-                obs.poly_verts[max_verts - 1].x = x0;
-                obs.poly_verts[max_verts - 1].y = y0;
-                obs.vert_count = max_verts;
-                spdlog::warn("Replace tail vertex with head vertex");
-            }
-        }
-    }
     obs.ComputeAABB();
-    polygon_ssbo_.obstacles[polygon_ssbo_.count++] = std::move(obs);
 }
 
 void ObstacleGeometry::Clear() {

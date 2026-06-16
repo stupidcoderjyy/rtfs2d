@@ -27,7 +27,7 @@ void Window::Show() {
             glfwTerminate();
         });
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        std::string title = "rtfs2d" + case_data_->name();
+        std::string title = "rtfs2d - " + case_data_->name();
         width_ = case_data_->nx();
         height_ = case_data_->ny();
         window_ = glfwCreateWindow(width_, height_, title.c_str(), nullptr, nullptr);
