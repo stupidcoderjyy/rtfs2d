@@ -1,0 +1,17 @@
+{
+  "case": {
+    "mesh_resolution": [2560, 1440],
+    "mesh_density": 1.38888888e-3,
+    "boundary_conditions": {
+      "left": [
+        { "from": 0.0, "to": 1.0, "type": "velocity", "u": 0.4}
+      ],
+      "right": [
+        { "from": 0.0, "to": 1.0, "type": "pressure"}
+      ]
+    },
+    "geometry": [
+      "P(0.2, 1.2) P(0.25, 1.25) P(0.7, 0.8) P(0.65, 0.75)"
+    ]
+  }
+}

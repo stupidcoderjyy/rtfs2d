@@ -1,4 +1,4 @@
-//
+﻿//
 // Created by PC on 2026/6/5.
 //
 
@@ -44,13 +44,14 @@ void Window::Show() {
         imgui_ctx_ = std::make_unique<ImGuiVulkanContext>(window_,
             *device_manager_, *swapchain_ctx_->render_pass(),
             swapchain_ctx_->swapchain_images().size());
-        ImGuiControlPanel imgui_control(vis_config_, *compute_ctx_);
+        ImGuiControlPanel imgui_control(vis_config_, *compute_ctx_, *this);
         //上传流程数据
         compute_ctx_->UploadCaseData();
 
         glfwSetWindowUserPointer(window_, this);
         glfwSetMouseButtonCallback(window_, MouseButtonCallback);
         glfwSetCursorPosCallback(window_, CursorPosCallback);
+        glfwSetKeyCallback(window_, KeyCallback);
         glfwSetFramebufferSizeCallback(window_, [](GLFWwindow* win, int w, int h) {
             auto* rtfs_win = static_cast<Window*>(glfwGetWindowUserPointer(win));
             rtfs_win->swapchain_ctx_->set_needs_recreate(true);
@@ -179,6 +180,31 @@ void Window::CursorPosCallback(GLFWwindow *window, double xpos, double ypos) {
     float nx = static_cast<float>(xpos) / static_cast<float>(w->width_);
     float ny = static_cast<float>(ypos) / static_cast<float>(w->height_); // 翻转 Y 轴
     w->compute_ctx_->SetDyeInjectPos(nx, ny);
+}
+
+
+void Window::ToggleFullscreen() {
+    if (fullscreen_) {
+        glfwSetWindowMonitor(window_, nullptr,
+            windowed_x_, windowed_y_, windowed_w_, windowed_h_, 0);
+    } else {
+        glfwGetWindowPos(window_, &windowed_x_, &windowed_y_);
+        glfwGetWindowSize(window_, &windowed_w_, &windowed_h_);
+        GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+        glfwSetWindowMonitor(window_, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+    }
+    fullscreen_ = !fullscreen_;
+}
+
+
+void Window::KeyCallback(GLFWwindow *window, int key, int scancode, int action, int mods) {
+    ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
+    if (ImGui::GetIO().WantCaptureKeyboard) return;
+    auto* w = static_cast<Window*>(glfwGetWindowUserPointer(window));
+    if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
+        w->vis_config_.paused = !w->vis_config_.paused;
+    }
 }
 
 }  // namespace rtfs2d

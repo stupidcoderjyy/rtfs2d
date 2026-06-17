@@ -7,11 +7,12 @@
 #include <imgui.h>
 #include "vis_config.h"
 #include "solver/compute_context.h"
+#include "render/window.h"
 
 namespace rtfs2d {
 
-ImGuiControlPanel::ImGuiControlPanel(VisConfig& config, ComputeContext& cc)
-        : config_(&config), cc_(&cc) {}
+ImGuiControlPanel::ImGuiControlPanel(VisConfig& config, ComputeContext& cc, Window& window)
+        : config_(&config), cc_(&cc), window_(&window) {}
 
 void ImGuiControlPanel::Render() const {
     ImGui::Begin("Control Panel", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
@@ -27,6 +28,10 @@ void ImGuiControlPanel::Render() const {
     ImGui::SameLine();
     if (ImGui::Button("Init Field")) {
         cc_->InitField();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(window_->fullscreen() ? "Windowed" : "Fullscreen")) {
+        window_->ToggleFullscreen();
     }
 
     // ---- 粘度 ----

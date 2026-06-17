@@ -1,4 +1,4 @@
-//
+﻿//
 // Created by PC on 2026/6/5.
 //
 
@@ -18,6 +18,9 @@ class Window {
 public:
     explicit Window(std::unique_ptr<CaseData> case_data, bool debug_enabled = true);
     void Show();
+    void ToggleFullscreen();
+
+    bool fullscreen() const { return fullscreen_; };
 private:
     int width_, height_;
     GLFWwindow* window_{};
@@ -29,10 +32,13 @@ private:
     std::unique_ptr<CaseData> case_data_;
     VisConfig vis_config_;
     bool debug_enabled_;
+    int windowed_x_{}, windowed_y_{}, windowed_w_{}, windowed_h_{};
+    bool fullscreen_{};
     size_t current_frame_ = 0;
 
     static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
     static void CursorPosCallback(GLFWwindow* window, double xpos, double ypos);
+    static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 };
 
 }

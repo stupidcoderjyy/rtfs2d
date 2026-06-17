@@ -25,7 +25,7 @@ float sampleSmooth(int ci, int cj, bool isU) {
 
     float sum = 0.0;
     uint count = 0u;
-    const int w = 2;
+    const int w = 1;
     for (int dj = -w; dj <= w; ++dj) {
         for (int di = -w; di <= w; ++di) {
             int ni = ci + di;

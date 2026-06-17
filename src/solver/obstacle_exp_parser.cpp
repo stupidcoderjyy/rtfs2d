@@ -198,6 +198,8 @@ void PropertyObs::Reduce0(
 void PropertyObs::Reduce1(
         PropertyObs& p0,
         PropertyShape& p1) {
+    types_ = std::move(p0.types_);
+    args_ = std::move(p0.args_);
     types_.push_back(p1.function());
     args_.push_back(std::move(p1.args()));
 }

@@ -9,15 +9,17 @@ namespace rtfs2d {
 
 struct VisConfig;
 class ComputeContext;
+class Window;
 
 class ImGuiControlPanel {
 public:
-    explicit ImGuiControlPanel(VisConfig& config, ComputeContext& cc);
+    explicit ImGuiControlPanel(VisConfig& config, ComputeContext& cc, Window& window);
     void Render() const;
 
 private:
     VisConfig* config_;
     ComputeContext* cc_;
+    Window* window_;
 
     void RenderFieldControls() const;
     void RenderDyeControls() const;
