@@ -16,15 +16,16 @@ enum class VisMode { kField = 0, kDye = 1 };
 
 
 struct VisConfig {
-    VisMode vis_mode;
-    VisGradient vis_gradient;
-    VisField vis_field;
-    std::array<float, 3> field_coeff;
-    std::array<float, 3> max_field_coeff;
-    float dye_radius;
-    std::array<uint32_t, 3> dye_colors_;
-    float time_step;
-    bool paused;
+    VisMode vis_mode{};
+    VisGradient vis_gradient{};
+    VisField vis_field{};
+    std::array<float, 3> field_coeff{};
+    std::array<float, 3> max_field_coeff{};
+    float dye_radius{};
+    std::array<uint32_t, 3> dye_colors_{};
+    float time_step{};
+    float viscosity{};
+    bool paused{};
 
     VisConfig();
     void Reset();

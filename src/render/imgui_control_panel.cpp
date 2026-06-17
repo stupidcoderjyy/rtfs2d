@@ -29,6 +29,9 @@ void ImGuiControlPanel::Render() const {
         cc_->InitField();
     }
 
+    // ---- 粘度 ----
+    ImGui::SliderFloat("Viscosity", &config_->viscosity, 0.0f, 5.0f, "%.2f");
+
     // ---- 时间步长 (两种模式共享) ----
     ImGui::SliderFloat("Time Step", &config_->time_step, 0.001f, 0.05f, "%.4f");
 

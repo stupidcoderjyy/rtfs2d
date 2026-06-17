@@ -38,18 +38,9 @@ public:
             vk::PipelineStageFlagBits::eComputeShader, cb, buf);
     }
 
-    DescriptorSetIndex GetVisDescriptorSetIndex() const {
-        return dye_use_set1_ ? kSetVis1 : kSetVis2;
-    }
-
-    void SetDyeInjectPos(float x, float y) {
-        dye_x_ = x;
-        dye_y_ = y;
-    }
-
-    void SetDyeInjecting(bool injecting) {
-        dye_injecting_ = injecting;
-    }
+    DescriptorSetIndex GetVisDescriptorSetIndex() const { return dye_use_set1_ ? kSetVis1 : kSetVis2;}
+    void SetDyeInjectPos(float x, float y) { dye_x_ = x;dye_y_ = y; }
+    void SetDyeInjecting(bool injecting) {dye_injecting_ = injecting;}
 
     int cell_count() const { return cell_count_; }
     vk::DeviceSize buf_size() const { return compute_buf_size_; }
@@ -71,8 +62,8 @@ private:
     bool dye_injecting_ = false;
     // 染料位置
     float dye_x_{}, dye_y_{};
-    void UploadObstacles();
 
+    void UploadObstacles();
     void ComputeObstacles(const vk::raii::CommandBuffer& cb) const;
     void ComputeFluid(const vk::raii::CommandBuffer& cb);
     void ComputeRenderData(const vk::raii::CommandBuffer& cb) const;

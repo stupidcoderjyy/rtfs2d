@@ -20,12 +20,12 @@ ComputeContext::ComputeContext(
         DescriptorSets& ds,
         const CaseData& case_data,
         VisConfig& vis_config)
-        : dm_(&dm), case_data_(&case_data), ds_(&ds), vis_config_(&vis_config),
+        : case_data_(&case_data), dm_(&dm), ds_(&ds), vis_config_(&vis_config),
         cell_count_(case_data.total_cells()),
-        compute_buf_size_(cell_count_ * sizeof(float)),
         poisson_iter_n(std::clamp(
             static_cast<uint32_t>(std::ceil(50 * (0.00195f * case_data.dx()))),
-            1u, 100u)) {
+            1u, 100u)),
+        compute_buf_size_(cell_count_ * sizeof(float)) {
     fluid_solvers_ = std::make_unique<FluidSolvers>(dm, *this, case_data, ds);
 }
 
@@ -152,9 +152,8 @@ void ComputeContext::ComputeFluid(const vk::raii::CommandBuffer& cb) {
     // fluid_solvers_->SolveVorticity(cb, DescriptorSetAt(kSetVorticity), 0.0f);
 
     // 扩散迭代（u 和 v 各做一次雅可比迭代）
-    float viscosity = 0.8f;
     float dx = case_data_->dx();
-    float alpha = viscosity * vis_config_->time_step / (dx * dx);
+    float alpha = vis_config_->viscosity * vis_config_->time_step / (dx * dx);
     float beta = 4.0f + alpha;
     // 必须是奇数次迭代，否则无法把u、v换到前两个缓冲中
     for (int iter = 0; iter < poisson_iter_n; ++iter) {
