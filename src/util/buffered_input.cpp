@@ -5,7 +5,6 @@
 #include "buffered_input.h"
 
 #include <algorithm>
-#include <cstring>
 #include <fstream>
 #include <stdexcept>
 
@@ -14,7 +13,7 @@
 namespace rtfs2d {
 
 BufferedInput::BufferedInput(std::unique_ptr<ByteReader> reader, int buffer_size)
-    : reader_(std::move(reader)), buffer_size_(buffer_size) {
+    : buffer_size_(buffer_size), reader_(std::move(reader)) {
     if (buffer_size_ <= 0 || buffer_size_ > kMaxBufferSize) {
         throw std::runtime_error("BufferedInput: invalid buffer size");
     }
@@ -95,7 +94,7 @@ std::string BufferedInput::CaptureSubstring(int end, int start) const {
     }
     if (start < end) {
         // 连续区间，直接构造
-        return std::string(buffer_.data() + start, end - start);
+        return {buffer_.data() + start, static_cast<std::string::size_type>(end - start)};
     }
     // 回绕区间：从 start 到缓冲区末尾，再从开头到 end
     int len_b = buf_end_b_ - start;

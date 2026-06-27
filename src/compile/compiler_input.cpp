@@ -18,7 +18,6 @@ CompilerInput::CompilerInput(std::unique_ptr<ByteReader> reader, std::string fil
     mark_data_.push_back(GetData());
 }
 
-
 std::unique_ptr<CompilerInput> CompilerInput::FromString(
         const std::string& utf8_data, const std::string& name, int buffer_size) {
     auto reader = std::make_unique<StringByteReader>(utf8_data);

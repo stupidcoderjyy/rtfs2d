@@ -14,7 +14,7 @@ class SwapchainContext;
 class ComputeContext;
 class DescriptorSets;
 class CaseData;
-class VisConfig;
+struct VisConfig;
 
 class GraphicsContext {
 public:

@@ -95,7 +95,7 @@ LALRParser::LALRParser(int remap, int non_terminal, int terminal, int states):
         suppliers_(std::vector<PropertySupplier>(non_terminal)),
         input_() {}
 
-void LALRParser::Run(Lexer &lexer, AbstractInput &input) {
+void LALRParser::Run(Lexer &lexer, CompilerInput &input) {
     input_ = &input;
     input.Mark();
     std::vector<int> states;
@@ -125,7 +125,7 @@ void LALRParser::Run(Lexer &lexer, AbstractInput &input) {
                     head->OnReduced(productions_[0], body);
                 } catch (std::runtime_error& err) {
                     input.Recover(false);
-                    throw dynamic_cast<CompilerInput*>(input_)->ErrorAtMark(err.what());
+                    throw input_->ErrorAtMark(err.what());
                 }
                 OnFinished();
                 return;
@@ -159,7 +159,7 @@ void LALRParser::Run(Lexer &lexer, AbstractInput &input) {
                     p_head->OnReduced(p, body);
                 } catch (std::runtime_error& err) {
                     input.Recover(false);
-                    throw dynamic_cast<CompilerInput*>(input_)->ErrorAtMark(err.what());
+                    throw input_->ErrorAtMark(err.what());
                 }
                 properties.push_back(std::move(p_head));
                 states.push_back(goto_[states.back()][p->head_->id_]);
@@ -173,11 +173,9 @@ void LALRParser::Run(Lexer &lexer, AbstractInput &input) {
 LALRParser::~LALRParser() = default;
 
 void LALRParser::OnFailed(const std::unique_ptr<Token>& at) {
-    if (auto ci = dynamic_cast<CompilerInput*>(input_)) {
-        throw at ?
-              ci->ErrorAtMark("syntax error") :
-              ci->ErrorMarkToForward("unknown symbol");
-    }
+    throw at ?
+          input_->ErrorAtMark("syntax error") :
+          input_->ErrorMarkToForward("unknown symbol");
 }
 
 }

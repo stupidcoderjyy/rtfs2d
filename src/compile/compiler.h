@@ -54,12 +54,11 @@ class Production final {
 public:
     int id_;
     int body_len_;
-    std::shared_ptr<Symbol> head_;
-    std::vector<std::shared_ptr<Symbol>> body_;
+    Symbol* head_;
+    std::vector<Symbol*> body_;
 
-    Production(int id, std::shared_ptr<Symbol> head, int body_len,
-        std::vector<std::shared_ptr<Symbol>> body)
-        : id_(id), body_len_(body_len),head_(std::move(head)), body_(std::move(body)) {}
+    Production(int id, Symbol* head, int body_len, std::vector<Symbol*> body)
+        : id_(id), body_len_(body_len),head_(head), body_(std::move(body)) {}
     ~Production() = default;
 };
 
@@ -69,13 +68,6 @@ public:
         const std::unique_ptr<Production>& p,
         const std::vector<std::unique_ptr<Property>>& properties) = 0;
     virtual ~Property() = default;
-
-    template<typename T>
-    std::unique_ptr<T> CastProp(std::unique_ptr<Property> prop) {
-        auto* ptr = prop.get();
-        prop.release();
-        return std::unique_ptr<T>(ptr);
-    }
 };
 
 class PropertyTerminal final : public Property {
@@ -109,12 +101,13 @@ protected:
     std::vector<TokenSupplier> token_suppliers_;
 };
 
+class CompilerInput;
 
 class LALRParser {
 public:
     typedef std::function<std::unique_ptr<Property>()> PropertySupplier;
     LALRParser(int remap, int non_terminal, int terminal, int states);
-    void Run(Lexer& lexer, AbstractInput& input);
+    void Run(Lexer& lexer, CompilerInput& input);
     virtual ~LALRParser();
 protected:
     virtual void OnFinished() {};
@@ -128,8 +121,8 @@ protected:
     std::vector<int> terminal_remap_;
     std::vector<std::unique_ptr<Production>> productions_;
     std::vector<PropertySupplier> suppliers_;
-    std::vector<std::shared_ptr<Symbol>> symbols_;
-    AbstractInput* input_;
+    std::vector<std::unique_ptr<Symbol>> symbols_;
+    CompilerInput* input_;
 };
 
 }

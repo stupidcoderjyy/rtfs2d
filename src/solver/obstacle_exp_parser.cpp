@@ -151,25 +151,25 @@ void ObstacleExpParser::InitOthers() {
 }
 
 void ObstacleExpParser::InitGrammar() {
-    symbols_.push_back(std::make_shared<Symbol>(false, 3));
-    symbols_.push_back(std::make_shared<Symbol>(false, 1));
-    symbols_.push_back(std::make_shared<Symbol>(false, 2));
-    symbols_.push_back(std::make_shared<Symbol>(false, 0));
-    symbols_.push_back(std::make_shared<Symbol>(false, 4));
-    symbols_.push_back(std::make_shared<Symbol>(true, 2));
-    symbols_.push_back(std::make_shared<Symbol>(true, 3));
-    symbols_.push_back(std::make_shared<Symbol>(true, 1));
-    symbols_.push_back(std::make_shared<Symbol>(true, 4));
-    symbols_.push_back(std::make_shared<Symbol>(true, 6));
-    symbols_.push_back(std::make_shared<Symbol>(true, 5));
-    productions_.push_back(std::make_unique<Production>(0, symbols_[3], 1, std::vector{symbols_[1]})); //root → obs
-    productions_.push_back(std::make_unique<Production>(1, symbols_[1], 1, std::vector{symbols_[2]})); //obs → shape
-    productions_.push_back(std::make_unique<Production>(2, symbols_[1], 2, std::vector{symbols_[1], symbols_[2]})); //obs → obs shape
-    productions_.push_back(std::make_unique<Production>(3, symbols_[2], 4, std::vector{symbols_[7], symbols_[5], symbols_[0], symbols_[6]})); //shape → id ( args )
-    productions_.push_back(std::make_unique<Production>(4, symbols_[0], 1, std::vector{symbols_[4]})); //args → arg
-    productions_.push_back(std::make_unique<Production>(5, symbols_[0], 3, std::vector{symbols_[0], symbols_[8], symbols_[4]})); //args → args , arg
-    productions_.push_back(std::make_unique<Production>(6, symbols_[4], 1, std::vector{symbols_[10]})); //arg → int
-    productions_.push_back(std::make_unique<Production>(7, symbols_[4], 1, std::vector{symbols_[9]})); //arg → float
+    symbols_.push_back(std::make_unique<Symbol>(false, 3));
+    symbols_.push_back(std::make_unique<Symbol>(false, 1));
+    symbols_.push_back(std::make_unique<Symbol>(false, 2));
+    symbols_.push_back(std::make_unique<Symbol>(false, 0));
+    symbols_.push_back(std::make_unique<Symbol>(false, 4));
+    symbols_.push_back(std::make_unique<Symbol>(true, 2));
+    symbols_.push_back(std::make_unique<Symbol>(true, 3));
+    symbols_.push_back(std::make_unique<Symbol>(true, 1));
+    symbols_.push_back(std::make_unique<Symbol>(true, 4));
+    symbols_.push_back(std::make_unique<Symbol>(true, 6));
+    symbols_.push_back(std::make_unique<Symbol>(true, 5));
+    productions_.push_back(std::make_unique<Production>(0, symbols_[3].get(), 1, std::vector{symbols_[1].get()})); //root → obs
+    productions_.push_back(std::make_unique<Production>(1, symbols_[1].get(), 1, std::vector{symbols_[2].get()})); //obs → shape
+    productions_.push_back(std::make_unique<Production>(2, symbols_[1].get(), 2, std::vector{symbols_[1].get(), symbols_[2].get()})); //obs → obs shape
+    productions_.push_back(std::make_unique<Production>(3, symbols_[2].get(), 4, std::vector{symbols_[7].get(), symbols_[5].get(), symbols_[0].get(), symbols_[6].get()})); //shape → id ( args )
+    productions_.push_back(std::make_unique<Production>(4, symbols_[0].get(), 1, std::vector{symbols_[4].get()})); //args → arg
+    productions_.push_back(std::make_unique<Production>(5, symbols_[0].get(), 3, std::vector{symbols_[0].get(), symbols_[8].get(), symbols_[4].get()})); //args → args , arg
+    productions_.push_back(std::make_unique<Production>(6, symbols_[4].get(), 1, std::vector{symbols_[10].get()})); //arg → int
+    productions_.push_back(std::make_unique<Production>(7, symbols_[4].get(), 1, std::vector{symbols_[9].get()})); //arg → float
 }
 
 //args → arg
